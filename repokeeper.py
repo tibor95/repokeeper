@@ -73,7 +73,7 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-def log(logtype: LogType, console_txt: Optional[str] = None, log_txt: Optional[str] = None, err_code: int  = -1, log_eof: str = "\n"):
+def log(logtype: LogType = LogType.NORMAL, console_txt: Optional[str] = None, log_txt: Optional[str] = None, err_code: int  = -1, log_eof: str = "\n"):
     if logtype == LogType.WARNING:
         open_col = WARNING
     elif logtype == LogType.ERROR:
@@ -322,7 +322,7 @@ if __name__ == "__main__":
     #except Exception as e:
     #    print("ERROR: failed to open {}: {}".format(logfile, str(e)))
     #    sys.exit()
-    log(LogType.NORMAL, log_txt="starting at " + time.strftime("%d %b %Y %H:%M:%S", time.localtime()))
+    log(log_txt="starting at " + time.strftime("%d %b %Y %H:%M:%S", time.localtime()))
     #lf.write("starting at " + time.strftime("%d %b %Y %H:%M:%S", time.localtime()) + "\n")
 
     # time.sleep(10)
@@ -364,7 +364,7 @@ if __name__ == "__main__":
         print(BOLD + "* Building packages..." + UNCOLOR)
     else:
         print(BOLD + "* Nothing to build..." + UNCOLOR)
-        log(LogType.NORMAL, log_txt="\nNo packages to be build")
+        log(log_txt="\nNo packages to be build")
 
     # iterating and updating packages in pkgs_tobuild list
     time.sleep(1)
@@ -373,7 +373,7 @@ if __name__ == "__main__":
         print("\n  * * BUILDING: " + package + " (" + str(position + 1) + "/" + str(
             len(pkgs_tobuild)) + ") - " + time.strftime("%H:%M:%S", time.localtime()))
 
-        log(LogType.NORMAL, log_txt="\nBuilding: " + package + " (" + str(position + 1) + "/" + str(len(pkgs_tobuild)) + ")- " + time.strftime(
+        log(log_txt="\nBuilding: " + package + " (" + str(position + 1) + "/" + str(len(pkgs_tobuild)) + ")- " + time.strftime(
             "%H:%M:%S", time.localtime()))
 
         # emptying builddir
@@ -398,7 +398,7 @@ if __name__ == "__main__":
 
         try:
             text =" ( makepkg's return code: {} )".format(result)
-            log(LogType.NORMAL, log_txt=text, console_txt=text)
+            log(log_txt=text, console_txt=text)
         except:
             pass
 
@@ -408,7 +408,7 @@ if __name__ == "__main__":
             print("   Copying " + lfile + " to " + repodir)
             try:
                 shutil.copy(lfile, repodir)
-                log(LogType.NORMAL, log_txt = " Copying final package: {}".format(lfile))
+                log(log_txt = " Copying final package: {}".format(lfile))
                 copied_count += 1
             except:
                 print(" Copying FAILED !?")
@@ -447,15 +447,15 @@ if __name__ == "__main__":
     # parsing local repo to identify outdated packages
     outdated, not_in_conf = parse_localrepo()
     if len(outdated) > 0:
-        log(LogType.NORMAL, log_txt = "\nFollowing packages has newer versions and might be deleted from your repo:")
+        log(log_txt = "\nFollowing packages has newer versions and might be deleted from your repo:")
         for item in outdated:
-            log(LogType.NORMAL, log_txt = "rm {} ;".format(item.file))
+            log(log_txt = "rm {} ;".format(item.file))
 
     if len(not_in_conf) > 0:
-        log(LogType.NORMAL, log_txt = "\nFollowing packages are not listed in your repokeeper.conf and might \
+        log(log_txt = "\nFollowing packages are not listed in your repokeeper.conf and might \
     be deleted from your repo (just copy&paste it en block into a console):")
         for item in not_in_conf:
-            log(LogType.NORMAL, log_txt = "rm {} ;".format(item.file))
+            log(log_txt = "rm {} ;".format(item.file))
 
-    log(LogType.NORMAL, log_txt ="")
-    log(LogType.NORMAL, log_txt = "All done at {}, quitting ".format(time.strftime("%d %b %Y %H:%M:%S", time.localtime())))
+    log(log_txt ="")
+    log(log_txt = "All done at {}, quitting ".format(time.strftime("%d %b %Y %H:%M:%S", time.localtime())))
