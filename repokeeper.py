@@ -109,7 +109,12 @@ def empty_dir(directory: str) -> None:  # recursivelly deletes content of given 
 
 
 def get_version_from_basename(filename: str) -> str:
-    return str(filename.split("-")[-3] + "." + filename.split("-")[-2])
+    try:
+        return str(filename.split("-")[-3] + "." + filename.split("-")[-2])
+    except Exception as e:
+        text = "Failed to parse: {}: {}".format(filename, str(e))
+        log(LogType.ERROR, log_txt = text, console_txt = text)
+        raise
 
 
 def get_basename_from_filename(fullname: str) -> str:
@@ -117,7 +122,7 @@ def get_basename_from_filename(fullname: str) -> str:
 
 def get_pkg_identification(filename: str) -> pkg_identification:
     file_basename = str(os.path.basename('-'.join(filename.split("-")[:-3])))
-    ver = get_version_from_basename(file_basename)
+    ver = get_version_from_basename(filename)
     return pkg_identification(filename, file_basename, ver)
 
 
@@ -249,9 +254,7 @@ def check_aur():
         if data['type'] == 'error' or data['resultcount'] == 0:
             # print 'Error: %s' % data['results']
             text = ' {:<18s} !  wrong name/not found in AUR'.format(pck)
-            print(text)
-
-            lf.write(text + "\n")
+            log(LogType.NORMAL, console_txt = text, log_txt = text)
 
             continue
 
@@ -261,11 +264,7 @@ def check_aur():
         resultscount = len(data['results'])
         if resultscount > 1:
             text = pck + " more then one results for package, skipping.... "
-            print(text)
-
-            lf.write(text + "\n")
-
-            # print (pck+" more then one results for package, skipping.... ")
+            log(LogType.NORMAL, console_txt = text, log_txt = text)
             continue
 
         aurpkg = data['results'][0]
@@ -278,9 +277,7 @@ def check_aur():
             curversion = pkgs_repoversion[pck]
             if parse_version(pkgs_aurversion[pck]) == parse_version(curversion):
                 text = ' {:<18s} - {:s} In latest version, no need to update'.format(pck, aurpkg['Version'])
-                print(text)
-
-                lf.write(text + "\n")
+                log(LogType.NORMAL, console_txt = text, log_txt = text)
 
             # print (' {:<18s} - {:s} In latest version, no need to update'.format(pck,aurpkg['Version']))
             elif parse_version(pkgs_aurversion[pck]) < parse_version(curversion):
