@@ -28,29 +28,22 @@ except:
     exit()
 
 import getpass
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from enum import Enum
 
 # DEFINING VARIABLES
 # defaults:
-repodir = "unset"
-builddir = "unset"
 conffileloc = "/etc/repokeeper.conf"
-reponame = "local-rk"
-
 logfile = "/tmp/repokeeper.log"
 BOLD = "\033[1m"
 WARNING = "\033[91m"
 HIGHLIGHT = "\033[92m"
 UNCOLOR = "\033[0m"
-
 package_regexp = "*pkg.tar.zst"
-
 version = "0.3.0"
 
 pkgs_conf: List[str] = []  # list of packages listed in conf file
-pkgs_repofilename = {}  # dictionary (conf filename:package name)
-pkgs_repoversion = {}  # dictionary (pck:version) of packages in repo directory
+latest_in_repo: Dict[str, "pkg_identification"]
 pkgs_aurversion = {}  # dictionary (pck:version) of packages from local repo with versions from AUR
 pkgs_tobuild = {}  # final dictionary (name:url) of packages to be updated
 
@@ -71,9 +64,7 @@ class LogType(Enum):
 def signal_handler(signal, frame):
     log(console_txt="\nSIGINT signal received. Quitting...", err_code=0)
 
-
 signal.signal(signal.SIGINT, signal_handler)
-
 
 def log(logtype: LogType = LogType.NORMAL, console_txt: Optional[str] = None, log_txt: Optional[str] = None,
         err_code: int = -1, log_eof: str = "\n"):
@@ -165,40 +156,39 @@ def parse_localrepo() -> Tuple[List[pkg_identification], List[pkg_identification
                 latest = pck_id
         # now we have identified file for given aur name
         if latest is not None:
-            pkgs_repofilename[aur_name] = latest.file_basename
-            pkgs_repoversion[aur_name] = latest.version
+            latest_in_repo[aur_name] = latest
 
     # printing what is in repository with latest versions
     strcurrepo = ""
-    for k, v in pkgs_repofilename.items():
-        strcurrepo = strcurrepo + " " + pkgs_repofilename[k] + "-" + pkgs_repoversion[k]
-    print(BOLD + "* Newest versions of packages in your local repository:" + UNCOLOR + strcurrepo)
+    for k, v in latest_in_repo.items():
+        strcurrepo = strcurrepo + " " + latest_in_repo[k].file_basename + "-" + latest_in_repo[k].version
+    log(LogType.BOLD, console_txt = "* Newest versions of packages in your local repository:")
+    log(console_txt = strcurrepo)
     if len(older_packages) > 0 or len(not_in_repo) > 0:
-        print(
-            BOLD + "* View the log file " + logfile + " for a list of outdated packages or packages not listed in your conf file." + UNCOLOR)
+        log(LogType.BOLD,
+            console_txt = "* View the log file " + logfile + " for a list of outdated packages or packages not listed in your conf file.")
     return older_packages, not_in_repo
 
 
 def printfirsttimenote():
-    print(BOLD + "  WELCOME!")
-    print("It seems you are running the repokeeper for the first time so some setup is needed.")
-    print("Now you have to open " + conffileloc + " and edit it (as root probably). 3 changes at least must be done:")
-    print(" 1. Edit and uncoment 'repodir' - the directory where compiled packages will be stored.")
-    print(
+    log(LogType.BOLD, console_txt = "  WELCOME!")
+    log(console_txt = "It seems you are running the repokeeper for the first time so some setup is needed.")
+    log(console_txt = "Now you have to open " + conffileloc + " and edit it (as root probably). 3 changes at least must be done:")
+    log(console_txt = " 1. Edit and uncoment 'repodir' - the directory where compiled packages will be stored.")
+    log(console_txt =
         " 2. Edit and uncoment 'buildir' - the directory where building will take place. (The directory will be emptied before each compilation).")
-    print(" 3. change 'firsttimemode' to 'no' - to get rid of First Time Mode you are in now.")
-    print(
+    log(console_txt = " 3. change 'firsttimemode' to 'no' - to get rid of First Time Mode you are in now.")
+    log(console_txt =
         " OPTIONALLY you might add more packages into PACKAGES section. Also changing the ownership of /etc/repokeeper.conf to other user might be usefful.")
-    print("When done, re-run the repokeeper.py." + UNCOLOR)
+    log(console_txt = "When done, re-run the repokeeper.py.")
 
 
-def parse_conffile() -> None:
-    global builddir, repodir, reponame, BOLD, WARNING, UNCOLOR
+def parse_conffile(conffileloc: str) -> Tuple[str, str, str]:
+
     # searching for conf file, /etc/repokeeper.conf is preffered
     if not os.path.isfile(conffileloc):
-        print(WARNING + "FAILED to open configuration file: " + conffileloc + UNCOLOR)
-        exit(6)
-    print("  Using configuration file: " + conffileloc)
+        log(LogType.WARNING, console_txt = "FAILED to open configuration file: " + conffileloc, err_code=6)
+    log(console_txt="  Using configuration file: " + conffileloc)
 
     with open(conffileloc, 'r') as repolistf:
         mode = "none"
@@ -236,7 +226,7 @@ def parse_conffile() -> None:
 
                 if line.replace(' ', '').split('=')[0] == "colors":
                     if line.replace(' ', '').split('=')[1].replace("\n", "") == "off":
-                        print("   Collors off..")
+                        log(console_txt="   Collors off..")
                         BOLD = ''
                         WARNING = ''
                         UNCOLOR = ''
@@ -245,6 +235,7 @@ def parse_conffile() -> None:
         log(LogType.WARNING, console_txt="  ! No packages found in config file, going on anyway...")
     else:
         log(console_txt="  Packages in your conf file: " + ' '.join(item for item in pkgs_conf))
+    return builddir, repodir, reponame
 
 
 def check_aur():
@@ -315,15 +306,14 @@ def get_compiledir(lbuilddir: str, package: str) -> str:
 if __name__ == "__main__":
 
     if getpass.getuser() == "root":
-        print("root is not allowed to run this tool")
-        sys.exit()
+        log(LogType.ERROR, console_txt="root is not allowed to run this tool", err_code=10)
 
     log(console_txt=" [REPOKEEPER v. " + version + "]")
     log(log_txt="starting at " + time.strftime("%d %b %Y %H:%M:%S", time.localtime()))
 
     # parsing conffile
     log(console_txt="* Parsing configuration file...")
-    parse_conffile()
+    builddir, repodir, reponame = parse_conffile(conffileloc)
     time.sleep(1)
 
     # testing existence of repordir and builddir
@@ -428,7 +418,6 @@ if __name__ == "__main__":
         log(LogType.HIGHLIGHT, console_txt="    Server = file://" + repodir)
         log(console_txt=
             " Also note that all pkg packages present in repodir was put into repo db file, not only those in your config file.")
-    # print (" You have to manualy delete unneeded packages, and rerun repokeeper to update repo db file.")
     except:
         log(LogType.ERROR, console_txt="   repodb file creation failed")
 
