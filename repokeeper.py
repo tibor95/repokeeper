@@ -33,6 +33,7 @@ from enum import Enum
 
 # DEFINING VARIABLES
 # defaults:
+reponame = "local-rk"
 conffileloc = "/etc/repokeeper.conf"
 logfile = "/tmp/repokeeper.log"
 BOLD = "\033[1m"
@@ -43,9 +44,9 @@ package_regexp = "*pkg.tar.zst"
 version = "0.3.0"
 
 pkgs_conf: List[str] = []  # list of packages listed in conf file
-latest_in_repo: Dict[str, "pkg_identification"]
-pkgs_aurversion = {}  # dictionary (pck:version) of packages from local repo with versions from AUR
-pkgs_tobuild = {}  # final dictionary (name:url) of packages to be updated
+latest_in_repo: Dict[str, "pkg_identification"] = {}
+#pkgs_aurversion = {}  # dictionary (pck:version) of packages from local repo with versions from AUR
+
 
 
 # problems with cases - discrepancie with cases in aur names and package names
@@ -123,8 +124,11 @@ def get_pkg_identification(filename: str) -> pkg_identification:
     return pkg_identification(filename, file_basename, ver)
 
 
-def parse_localrepo() -> Tuple[List[pkg_identification], List[pkg_identification]]:
-    # testing if package listed in conf file has a package in repodir
+def parse_localrepo(latest_in_repo) -> Tuple[List[pkg_identification], List[pkg_identification]]:  # elaborate this
+    #  this should return
+    # files for required packages, but having newer version
+    # required packages, that are not in repo
+    # packages in repo, but not required by config
 
     not_in_repo: List[pkg_identification] = []  # list of files for packages not defined in repo.conf
 
@@ -235,55 +239,63 @@ def parse_conffile(conffileloc: str) -> Tuple[str, str, str]:
         log(LogType.WARNING, console_txt="  ! No packages found in config file, going on anyway...")
     else:
         log(console_txt="  Packages in your conf file: " + ' '.join(item for item in pkgs_conf))
-    return builddir, repodir, reponame
+    return builddir, repodir
 
+def get_actual_aur_version(pck:str) -> Optional[Dict]:
+    response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
+    html = response.read()
+    data = json.loads(html.decode('utf-8'))
 
-def check_aur():
+    if data['type'] == 'error' or data['resultcount'] == 0:
+        text = ' {:<18s} !  wrong name/not found in AUR'.format(pck)
+        log(LogType.NORMAL, console_txt=text, log_txt=text)
+
+        return None
+
+    if not isinstance(data['results'], list):
+        data['results'] = [data['results'], ]
+
+    resultscount = len(data['results'])
+    if resultscount > 1:
+        text = pck + " more then one results for package, skipping.... "
+        log(LogType.NORMAL, console_txt=text, log_txt=text)
+        return None
+
+    return data['results'][0]
+
+def check_aur(pkgs_from_conf: [str], latest_packages: Dict[str, "pkg_identification"]):
+    pkgs_tobuild: Dict[str, str] = {}  # final dictionary (name:url) of packages to be updated
     log(LogType.BOLD, console_txt="* Checking AUR for latest versions...")
     log(console_txt=" ")
     time.sleep(1)
-    for pck in pkgs_conf:
-        response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
-        html = response.read()
-        data = json.loads(html.decode('utf-8'))
+    for pck in pkgs_from_conf:
 
-        if data['type'] == 'error' or data['resultcount'] == 0:
-            text = ' {:<18s} !  wrong name/not found in AUR'.format(pck)
-            log(LogType.NORMAL, console_txt=text, log_txt=text)
+        aurpkg = get_actual_aur_version(pck)
 
+        if aurpkg is None:
             continue
 
-        if not isinstance(data['results'], list):
-            data['results'] = [data['results'], ]
+        aurversion = str(aurpkg['Version'].replace("-", "."))
 
-        resultscount = len(data['results'])
-        if resultscount > 1:
-            text = pck + " more then one results for package, skipping.... "
-            log(LogType.NORMAL, console_txt=text, log_txt=text)
-            continue
-
-        aurpkg = data['results'][0]
-        pkgs_aurversion[pck] = str(aurpkg['Version'].replace("-", "."))
-
-        if not pck in pkgs_repoversion:
+        if not pck in latest_packages:
             log(console_txt=' {:<18s} + Building version {:}'.format(pck, aurpkg['Version']))
             pkgs_tobuild[pck] = str("http://aur.archlinux.org" + aurpkg['URLPath'])
         else:
-            curversion = pkgs_repoversion[pck]
-            if parse_version(pkgs_aurversion[pck]) == parse_version(curversion):
+            curversion = aurversion
+            if parse_version(aurversion) == parse_version(curversion):
                 text = ' {:<18s} - {:s} In latest version, no need to update'.format(pck, aurpkg['Version'])
                 log(LogType.NORMAL, console_txt=text, log_txt=text)
 
-            elif parse_version(pkgs_aurversion[pck]) < parse_version(curversion):
+            elif parse_version(aurversion) < parse_version(curversion):
                 log(console_txt=' {:<18s} - {:s} Local package newer({:s}), doing nothing'.format(pck,
                                                                                                   aurpkg['Version'],
-                                                                                                  pkgs_repoversion[
-                                                                                                      pck]))
+                                                                                                  aurversion))
             else:
                 log(console_txt=' {:<18s} + updating {:s} -> {:s}'.format(pck, pkgs_repoversion[pck],
                                                                           aurpkg['Version']))
                 pkgs_tobuild[pck] = "http://aur.archlinux.org" + str(aurpkg['URLPath'])
         time.sleep(0.5)
+    return pkgs_tobuild
 
 
 def get_compiledir(lbuilddir: str, package: str) -> str:
@@ -313,7 +325,7 @@ if __name__ == "__main__":
 
     # parsing conffile
     log(console_txt="* Parsing configuration file...")
-    builddir, repodir, reponame = parse_conffile(conffileloc)
+    builddir, repodir = parse_conffile(conffileloc)
     time.sleep(1)
 
     # testing existence of repordir and builddir
@@ -331,12 +343,13 @@ if __name__ == "__main__":
         log(console_txt="* Build/temp. directory: " + builddir)
 
     # finding what is in localrepo directory
-    parse_localrepo()  # also prints out packages in localrepo
+    older_packages, not_in_repo = parse_localrepo(latest_in_repo)  # also prints out packages in localrepo
     time.sleep(1)
 
     # checking what is in AUR and what version
     if len(pkgs_conf) > 0:
-        check_aur()  # also print out output from aur check
+        #print(latest_in_repo)
+        pkgs_tobuild = check_aur(pkgs_conf, latest_in_repo)  # also print out output from aur check
 
     # print pkgs_tobuild (list of packages to be update)
     print(" ")
@@ -422,8 +435,8 @@ if __name__ == "__main__":
         log(LogType.ERROR, console_txt="   repodb file creation failed")
 
     # parsing local repo to identify outdated packages
-    outdated, not_in_conf = parse_localrepo()
-    if len(outdated) > 0:
+    older_packages, not_in_repo = parse_localrepo(latest_in_repo)
+    if len(older_packages) > 0:
         log(log_txt="\nFollowing packages has newer versions and might be deleted from your repo:")
         for item in outdated:
             log(log_txt="rm {} ;".format(item.file))
