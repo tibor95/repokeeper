@@ -163,7 +163,7 @@ def parse_localrepo() -> Tuple[List[pkg_identification], List[pkg_identification
         strcurrepo = strcurrepo + " " + newest_required_in_repo[k].file_basename + "-" + newest_required_in_repo[k].version
     log(LogType.BOLD, console_txt = "* Newest versions of packages in your local repository:")
     log(console_txt = strcurrepo)
-    if len(required_but_with_newer_version) > 0 or len(not_in_repo) > 0:
+    if len(required_but_with_newer_version) > 0 or len(in_repo_not_required) > 0:
         log(LogType.BOLD,
             console_txt = "* View the log file " + logfile + " for a list of outdated packages or packages not listed in your conf file.")
     return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
@@ -242,7 +242,7 @@ def fetch_pck_info_from_aur_web(pck:str) -> Optional[Dict]:
     data = json.loads(html.decode('utf-8'))
 
     if data['type'] == 'error' or data['resultcount'] == 0:
-        text = ' {:<18s} !  wrong name/not found in AUR'.format(pck)
+        text = ' {:<22s} !  wrong name/not found in AUR'.format(pck)
         log(LogType.NORMAL, console_txt=text, log_txt=text)
 
         return None
@@ -271,20 +271,20 @@ def check_aur_web(pkgs_from_conf: List[str], latest_packages: Dict[str, pkg_iden
         aurversion = str(aur_web_info['Version'].replace("-", "."))
 
         if not pck in latest_packages:
-            log(console_txt=' {:<18s} + Building version {:}'.format(pck, aur_web_info['Version']))
+            log(console_txt=' {:<22s} + Building version {:}'.format(pck, aur_web_info['Version']))
             pkgs_tobuild[pck] = str("http://aur.archlinux.org" + aur_web_info['URLPath'])
         else:
             curversion = latest_packages[pck].version
             if parse_version(aurversion) == parse_version(curversion):
-                text = ' {:<18s} - {:s} In latest version, no need to update'.format(pck, aur_web_info['Version'])
+                text = ' {:<22s} - {:s} In latest version, no need to update'.format(pck, aur_web_info['Version'])
                 log(LogType.NORMAL, console_txt=text, log_txt=text)
 
             elif parse_version(aurversion) < parse_version(curversion):
-                log(console_txt=' {:<18s} - {:s} Local package newer({:s}), doing nothing'.format(pck,
+                log(console_txt=' {:<22s} - {:s} Local package newer({:s}), doing nothing'.format(pck,
                                                                                                   aur_web_info['Version'],
                                                                                                   aurversion))
             else:
-                log(console_txt=' {:<18s} + updating {:s} -> {:s}'.format(pck, curversion,
+                log(console_txt=' {:<22s} + updating {:s} -> {:s}'.format(pck, curversion,
                                                                           aur_web_info['Version']))
                 pkgs_tobuild[pck] = "http://aur.archlinux.org" + str(aur_web_info['URLPath'])
         time.sleep(0.5)
