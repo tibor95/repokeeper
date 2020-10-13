@@ -44,12 +44,6 @@ package_regexp = "*pkg.tar.zst"
 version = "0.3.0"
 
 pkgs_conf: List[str] = []  # list of packages listed in conf file
-latest_in_repo: Dict[str, "pkg_identification"] = {}
-#pkgs_aurversion = {}  # dictionary (pck:version) of packages from local repo with versions from AUR
-
-
-
-# problems with cases - discrepancie with cases in aur names and package names
 
 
 class LogType(Enum):
@@ -61,7 +55,7 @@ class LogType(Enum):
     HIGHLIGHT = 5
 
 
-# DEFINING FUNCTIONS
+
 def signal_handler(signal, frame):
     log(console_txt="\nSIGINT signal received. Quitting...", err_code=0)
 
@@ -124,54 +118,55 @@ def get_pkg_identification(filename: str) -> pkg_identification:
     return pkg_identification(filename, file_basename, ver)
 
 
-def parse_localrepo(latest_in_repo) -> Tuple[List[pkg_identification], List[pkg_identification]]:  # elaborate this
-    #  this should return
+def parse_localrepo() -> Tuple[List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
+    # receives:
+    # Dictionary of pkg_name:pkg_identification
+    # returns:
     # files for required packages, but having newer version
     # required packages, that are not in repo
-    # packages in repo, but not required by config
 
-    not_in_repo: List[pkg_identification] = []  # list of files for packages not defined in repo.conf
-
-    # getting a list of files in repo
+    # getting a list of files (packages) in repo
     files = []
     files.extend(glob.glob(repodir + "/" + package_regexp))
     files = list(set(files))  # removing duplicates
 
+    in_repo_not_required: List[pkg_identification] = []  # list of files for packages not defined in repo.conf
     for file in files:
         pck_id = get_pkg_identification(file)
         if not pck_id.file_basename.lower() in [item.lower() for item in pkgs_conf]:
-            not_in_repo.append(pck_id)
+            in_repo_not_required.append(pck_id)
 
-    older_packages: List[pkg_identification] = []  # list of possible old packages
+    required_but_with_newer_version: List[pkg_identification] = []  # list of possible old packages
+    newest_required_in_repo: Dict[str, "pkg_identification"] = {}
     # now testing names in conf against files in repa
-    for aur_name in pkgs_conf:
-        latest = None  # single latest package for aur_name
+    for app_name in pkgs_conf:
+        latest = None  # single latest package for aur_name (application)
         for file in files:
             pck_id = get_pkg_identification(file)
-            if not aur_name.lower() == pck_id.file_basename.lower():
+            if not app_name.lower() == pck_id.file_basename.lower():
                 continue
             if latest is None:
                 latest = pck_id
                 continue
             if parse_version(latest.version) > parse_version(pck_id.version):
-                older_packages.append(pck_id)
+                required_but_with_newer_version.append(pck_id)
             else:
-                older_packages.append(latest)
+                required_but_with_newer_version.append(latest)
                 latest = pck_id
         # now we have identified file for given aur name
         if latest is not None:
-            latest_in_repo[aur_name] = latest
+            newest_required_in_repo[app_name] = latest
 
     # printing what is in repository with latest versions
     strcurrepo = ""
-    for k, v in latest_in_repo.items():
-        strcurrepo = strcurrepo + " " + latest_in_repo[k].file_basename + "-" + latest_in_repo[k].version
+    for k, v in newest_required_in_repo.items():
+        strcurrepo = strcurrepo + " " + newest_required_in_repo[k].file_basename + "-" + newest_required_in_repo[k].version
     log(LogType.BOLD, console_txt = "* Newest versions of packages in your local repository:")
     log(console_txt = strcurrepo)
-    if len(older_packages) > 0 or len(not_in_repo) > 0:
+    if len(required_but_with_newer_version) > 0 or len(not_in_repo) > 0:
         log(LogType.BOLD,
             console_txt = "* View the log file " + logfile + " for a list of outdated packages or packages not listed in your conf file.")
-    return older_packages, not_in_repo
+    return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
 
 
 def printfirsttimenote():
@@ -187,7 +182,7 @@ def printfirsttimenote():
     log(console_txt = "When done, re-run the repokeeper.py.")
 
 
-def parse_conffile(conffileloc: str) -> Tuple[str, str, str]:
+def parse_conffile(conffileloc: str) -> Tuple[str, str]:
 
     # searching for conf file, /etc/repokeeper.conf is preffered
     if not os.path.isfile(conffileloc):
@@ -241,7 +236,7 @@ def parse_conffile(conffileloc: str) -> Tuple[str, str, str]:
         log(console_txt="  Packages in your conf file: " + ' '.join(item for item in pkgs_conf))
     return builddir, repodir
 
-def get_actual_aur_version(pck:str) -> Optional[Dict]:
+def fetch_pck_info_from_aur_web(pck:str) -> Optional[Dict]:
     response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
     html = response.read()
     data = json.loads(html.decode('utf-8'))
@@ -255,45 +250,43 @@ def get_actual_aur_version(pck:str) -> Optional[Dict]:
     if not isinstance(data['results'], list):
         data['results'] = [data['results'], ]
 
-    resultscount = len(data['results'])
-    if resultscount > 1:
+    if len(data['results']) > 1:
         text = pck + " more then one results for package, skipping.... "
         log(LogType.NORMAL, console_txt=text, log_txt=text)
         return None
 
     return data['results'][0]
 
-def check_aur(pkgs_from_conf: [str], latest_packages: Dict[str, "pkg_identification"]):
+def check_aur_web(pkgs_from_conf: List[str], latest_packages: Dict[str, pkg_identification]) -> Dict[str, str]:
     pkgs_tobuild: Dict[str, str] = {}  # final dictionary (name:url) of packages to be updated
     log(LogType.BOLD, console_txt="* Checking AUR for latest versions...")
     log(console_txt=" ")
     time.sleep(1)
+
     for pck in pkgs_from_conf:
-
-        aurpkg = get_actual_aur_version(pck)
-
-        if aurpkg is None:
+        aur_web_info = fetch_pck_info_from_aur_web(pck)
+        if aur_web_info is None:
             continue
 
-        aurversion = str(aurpkg['Version'].replace("-", "."))
+        aurversion = str(aur_web_info['Version'].replace("-", "."))
 
         if not pck in latest_packages:
-            log(console_txt=' {:<18s} + Building version {:}'.format(pck, aurpkg['Version']))
-            pkgs_tobuild[pck] = str("http://aur.archlinux.org" + aurpkg['URLPath'])
+            log(console_txt=' {:<18s} + Building version {:}'.format(pck, aur_web_info['Version']))
+            pkgs_tobuild[pck] = str("http://aur.archlinux.org" + aur_web_info['URLPath'])
         else:
-            curversion = aurversion
+            curversion = latest_packages[pck].version
             if parse_version(aurversion) == parse_version(curversion):
-                text = ' {:<18s} - {:s} In latest version, no need to update'.format(pck, aurpkg['Version'])
+                text = ' {:<18s} - {:s} In latest version, no need to update'.format(pck, aur_web_info['Version'])
                 log(LogType.NORMAL, console_txt=text, log_txt=text)
 
             elif parse_version(aurversion) < parse_version(curversion):
                 log(console_txt=' {:<18s} - {:s} Local package newer({:s}), doing nothing'.format(pck,
-                                                                                                  aurpkg['Version'],
+                                                                                                  aur_web_info['Version'],
                                                                                                   aurversion))
             else:
-                log(console_txt=' {:<18s} + updating {:s} -> {:s}'.format(pck, pkgs_repoversion[pck],
-                                                                          aurpkg['Version']))
-                pkgs_tobuild[pck] = "http://aur.archlinux.org" + str(aurpkg['URLPath'])
+                log(console_txt=' {:<18s} + updating {:s} -> {:s}'.format(pck, curversion,
+                                                                          aur_web_info['Version']))
+                pkgs_tobuild[pck] = "http://aur.archlinux.org" + str(aur_web_info['URLPath'])
         time.sleep(0.5)
     return pkgs_tobuild
 
@@ -343,13 +336,13 @@ if __name__ == "__main__":
         log(console_txt="* Build/temp. directory: " + builddir)
 
     # finding what is in localrepo directory
-    older_packages, not_in_repo = parse_localrepo(latest_in_repo)  # also prints out packages in localrepo
+    older_packages, not_in_repo, latest_in_repo = parse_localrepo()  # also prints out packages in localrepo
     time.sleep(1)
 
     # checking what is in AUR and what version
     if len(pkgs_conf) > 0:
         #print(latest_in_repo)
-        pkgs_tobuild = check_aur(pkgs_conf, latest_in_repo)  # also print out output from aur check
+        pkgs_tobuild = check_aur_web(pkgs_conf, latest_in_repo)  # also print out output from aur check
 
     # print pkgs_tobuild (list of packages to be update)
     print(" ")
@@ -435,16 +428,16 @@ if __name__ == "__main__":
         log(LogType.ERROR, console_txt="   repodb file creation failed")
 
     # parsing local repo to identify outdated packages
-    older_packages, not_in_repo = parse_localrepo(latest_in_repo)
+    older_packages, packages_not_required, latest_in_repo = parse_localrepo()
     if len(older_packages) > 0:
         log(log_txt="\nFollowing packages has newer versions and might be deleted from your repo:")
-        for item in outdated:
+        for item in older_packages:
             log(log_txt="rm {} ;".format(item.file))
 
-    if len(not_in_conf) > 0:
+    if len(packages_not_required) > 0:
         log(log_txt="\nFollowing packages are not listed in your repokeeper.conf and might \
     be deleted from your repo (just copy&paste it en block into a console):")
-        for item in not_in_conf:
+        for item in packages_not_required:
             log(log_txt="rm {} ;".format(item.file))
 
     log(log_txt="")
