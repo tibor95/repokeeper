@@ -43,7 +43,6 @@ UNCOLOR = "\033[0m"
 package_regexp = "*pkg.tar.zst"
 version = "0.3.0"
 
-pkgs_conf: List[str] = []  # list of packages listed in conf file
 
 
 class LogType(Enum):
@@ -55,11 +54,12 @@ class LogType(Enum):
     HIGHLIGHT = 5
 
 
-
 def signal_handler(signal, frame):
     log(console_txt="\nSIGINT signal received. Quitting...", err_code=0)
 
+
 signal.signal(signal.SIGINT, signal_handler)
+
 
 def log(logtype: LogType = LogType.NORMAL, console_txt: Optional[str] = None, log_txt: Optional[str] = None,
         err_code: int = -1, log_eof: str = "\n"):
@@ -118,7 +118,8 @@ def get_pkg_identification(filename: str) -> pkg_identification:
     return pkg_identification(filename, file_basename, ver)
 
 
-def parse_localrepo() -> Tuple[List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
+def parse_localrepo(repo_dir: str) -> Tuple[
+    List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
     # receives:
     # Dictionary of pkg_name:pkg_identification
     # returns:
@@ -127,7 +128,7 @@ def parse_localrepo() -> Tuple[List[pkg_identification], List[pkg_identification
 
     # getting a list of files (packages) in repo
     files = []
-    files.extend(glob.glob(repodir + "/" + package_regexp))
+    files.extend(glob.glob(repo_dir + "/" + package_regexp))
     files = list(set(files))  # removing duplicates
 
     in_repo_not_required: List[pkg_identification] = []  # list of files for packages not defined in repo.conf
@@ -160,34 +161,36 @@ def parse_localrepo() -> Tuple[List[pkg_identification], List[pkg_identification
     # printing what is in repository with latest versions
     strcurrepo = ""
     for k, v in newest_required_in_repo.items():
-        strcurrepo = strcurrepo + " " + newest_required_in_repo[k].file_basename + "-" + newest_required_in_repo[k].version
-    log(LogType.BOLD, console_txt = "* Newest versions of packages in your local repository:")
-    log(console_txt = strcurrepo)
+        strcurrepo = strcurrepo + " " + newest_required_in_repo[k].file_basename + "-" + newest_required_in_repo[
+            k].version
+    log(LogType.BOLD, console_txt="* Newest versions of packages in your local repository:")
+    log(console_txt=strcurrepo)
     if len(required_but_with_newer_version) > 0 or len(in_repo_not_required) > 0:
         log(LogType.BOLD,
-            console_txt = "* View the log file " + logfile + " for a list of outdated packages or packages not listed in your conf file.")
+            console_txt="* View the log file " + logfile + " for a list of outdated packages or packages not listed in your conf file.")
     return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
 
 
 def printfirsttimenote():
-    log(LogType.BOLD, console_txt = "  WELCOME!")
-    log(console_txt = "It seems you are running the repokeeper for the first time so some setup is needed.")
-    log(console_txt = "Now you have to open " + conffileloc + " and edit it (as root probably). 3 changes at least must be done:")
-    log(console_txt = " 1. Edit and uncoment 'repodir' - the directory where compiled packages will be stored.")
-    log(console_txt =
+    log(LogType.BOLD, console_txt="  WELCOME!")
+    log(console_txt="It seems you are running the repokeeper for the first time so some setup is needed.")
+    log(
+        console_txt="Now you have to open " + conffileloc + " and edit it (as root probably). 3 changes at least must be done:")
+    log(console_txt=" 1. Edit and uncoment 'repodir' - the directory where compiled packages will be stored.")
+    log(console_txt=
         " 2. Edit and uncoment 'buildir' - the directory where building will take place. (The directory will be emptied before each compilation).")
-    log(console_txt = " 3. change 'firsttimemode' to 'no' - to get rid of First Time Mode you are in now.")
-    log(console_txt =
+    log(console_txt=" 3. change 'firsttimemode' to 'no' - to get rid of First Time Mode you are in now.")
+    log(console_txt=
         " OPTIONALLY you might add more packages into PACKAGES section. Also changing the ownership of /etc/repokeeper.conf to other user might be usefful.")
-    log(console_txt = "When done, re-run the repokeeper.py.")
+    log(console_txt="When done, re-run the repokeeper.py.")
 
 
-def parse_conffile(conffileloc: str) -> Tuple[str, str]:
-
+def parse_conffile(conffileloc: str) -> Tuple[str, str, List[str]]:
     # searching for conf file, /etc/repokeeper.conf is preffered
     if not os.path.isfile(conffileloc):
-        log(LogType.WARNING, console_txt = "FAILED to open configuration file: " + conffileloc, err_code=6)
+        log(LogType.WARNING, console_txt="FAILED to open configuration file: " + conffileloc, err_code=6)
     log(console_txt="  Using configuration file: " + conffileloc)
+    packages: List[str] = []
 
     with open(conffileloc, 'r') as repolistf:
         mode = "none"
@@ -208,7 +211,11 @@ def parse_conffile(conffileloc: str) -> Tuple[str, str]:
                 mode = "options"
                 continue
             elif mode == "packages":
-                pkgs_conf.append(line.split(' ')[0].replace("\n", ""))
+                pck = line.split(' ')[0].replace("\n", "")
+                if pck in packages:
+                    log(console_txt="{} repeated in config file".format(pck))
+                else:
+                    packages.append(pck)
             elif mode == "options":
                 if line.replace(' ', '').split('=')[0] == "repodir":
                     repodir = line.replace(' ', '').split('=')[1].replace("\n", "")
@@ -230,13 +237,14 @@ def parse_conffile(conffileloc: str) -> Tuple[str, str]:
                         WARNING = ''
                         UNCOLOR = ''
 
-    if len(pkgs_conf) == 0:
+    if len(packages) == 0:
         log(LogType.WARNING, console_txt="  ! No packages found in config file, going on anyway...")
     else:
-        log(console_txt="  Packages in your conf file: " + ' '.join(item for item in pkgs_conf))
-    return builddir, repodir
+        log(console_txt="  Packages in your conf file: " + ' '.join(item for item in packages))
+    return builddir, repodir, packages
 
-def fetch_pck_info_from_aur_web(pck:str) -> Optional[Dict]:
+
+def fetch_pck_info_from_aur_web(pck: str) -> Optional[Dict]:
     response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
     html = response.read()
     data = json.loads(html.decode('utf-8'))
@@ -256,6 +264,7 @@ def fetch_pck_info_from_aur_web(pck:str) -> Optional[Dict]:
         return None
 
     return data['results'][0]
+
 
 def check_aur_web(pkgs_from_conf: List[str], latest_packages: Dict[str, pkg_identification]) -> Dict[str, str]:
     pkgs_tobuild: Dict[str, str] = {}  # final dictionary (name:url) of packages to be updated
@@ -281,7 +290,8 @@ def check_aur_web(pkgs_from_conf: List[str], latest_packages: Dict[str, pkg_iden
 
             elif parse_version(aurversion) < parse_version(curversion):
                 log(console_txt=' {:<22s} - {:s} Local package newer({:s}), doing nothing'.format(pck,
-                                                                                                  aur_web_info['Version'],
+                                                                                                  aur_web_info[
+                                                                                                      'Version'],
                                                                                                   aurversion))
             else:
                 log(console_txt=' {:<22s} + updating {:s} -> {:s}'.format(pck, curversion,
@@ -308,64 +318,19 @@ def get_compiledir(lbuilddir: str, package: str) -> str:
     return "unknown"
 
 
-if __name__ == "__main__":
-
-    if getpass.getuser() == "root":
-        log(LogType.ERROR, console_txt="root is not allowed to run this tool", err_code=10)
-
-    log(console_txt=" [REPOKEEPER v. " + version + "]")
-    log(log_txt="starting at " + time.strftime("%d %b %Y %H:%M:%S", time.localtime()))
-
-    # parsing conffile
-    log(console_txt="* Parsing configuration file...")
-    builddir, repodir = parse_conffile(conffileloc)
-    time.sleep(1)
-
-    # testing existence of repordir and builddir
-    if repodir == "unset":
-        log(LogType.WARNING, console_txt="ERROR: No REPODIR is set in " + conffileloc, err_code=3)
-    if builddir == "unset":
-        log(LogType.WARNING, console_txt="ERROR: No BUILDDIR is set in " + conffileloc, err_code=3)
-    if not os.path.exists(repodir):
-        log(LogType.WARNING, console_txt="ERROR: non-existent REPODIR: " + repodir, err_code=4)
-    else:
-        log(console_txt="* Repository location: " + repodir)
-    if not os.path.exists(builddir):
-        log(LogType.WARNING, console_txt="ERROR: non-existent REPODIR: " + builddir, err_code=4)
-    else:
-        log(console_txt="* Build/temp. directory: " + builddir)
-
-    # finding what is in localrepo directory
-    older_packages, not_in_repo, latest_in_repo = parse_localrepo()  # also prints out packages in localrepo
-    time.sleep(1)
-
-    # checking what is in AUR and what version
-    if len(pkgs_conf) > 0:
-        #print(latest_in_repo)
-        pkgs_tobuild = check_aur_web(pkgs_conf, latest_in_repo)  # also print out output from aur check
-
-    # print pkgs_tobuild (list of packages to be update)
-    print(" ")
-    if len(pkgs_tobuild) > 0:
-        log(LogType.BOLD, console_txt="* Building packages...")
-    else:
-        print(BOLD + "* Nothing to build..." + UNCOLOR)
-        log(log_txt="\nNo packages to be build")
-
-    # iterating and updating packages in pkgs_tobuild list
-    time.sleep(1)
-
-    for position, package in enumerate(pkgs_tobuild):
+def building(pkgs: Dict[str, str]) -> None:
+    # receving dictionary of package name : aur url
+    for position, (package, url) in enumerate(pkgs.items()):
         text_body = package + " (" + str(position + 1) + "/" + str(
-            len(pkgs_tobuild)) + ") - " + time.strftime("%H:%M:%S", time.localtime())
+            len(pkgs)) + ") - " + time.strftime("%H:%M:%S", time.localtime())
         log(console_txt="\n  * * BUILDING: " + text_body, log_txt="\n Building: " + text_body)
 
         # emptying builddir
         empty_dir(builddir)
 
         # downloading package into builddir
-        localarchive = builddir + pkgs_tobuild[package].split('/')[-1]
-        urlretrieve(pkgs_tobuild[package], localarchive)
+        localarchive = builddir + package
+        urlretrieve(url, localarchive)
 
         # unpacking
         tararchive = tarfile.open(localarchive, "r:gz")
@@ -376,15 +341,11 @@ if __name__ == "__main__":
 
         try:
             result = subprocess.call("makepkg", cwd=compiledir, shell=True)
-        except:
-            log(console_txt=" ERROR: Build of " + package + " failed")
-            time.sleep(4)
-
-        try:
             text = " ( makepkg's return code: {} )".format(result)
             log(log_txt=text, console_txt=text)
-        except:
-            pass
+        except Exception as e:
+            log(console_txt=" ERROR: Build of {} failed with: {}".format(package, str(e)))
+            time.sleep(4)
 
         log(console_txt=" ")
         copied_count = 0
@@ -402,33 +363,92 @@ if __name__ == "__main__":
             log(LogType.WARNING, console_txt="No final files found and copied from {}, teminating".format(compiledir),
                 err_code=7)
 
-    # updating repository
-    time.sleep(1)
-    repo_db_file = repodir + reponame + ".db.tar.gz"
-    log(LogType.BOLD, console_txt="* Updating local repo db file: {}".format(repo_db_file))
-    if os.path.isfile(repo_db_file):
-        os.remove(repo_db_file)
+
+def folder_check(bdir: str, rdir: str, cfile: str) -> None:
+    if rdir == "unset":
+        log(LogType.WARNING, console_txt="ERROR: No REPODIR is set in " + cfile, err_code=3)
+    if bdir == "unset":
+        log(LogType.WARNING, console_txt="ERROR: No BUILDDIR is set in " + cfile, err_code=3)
+    if not os.path.exists(rdir):
+        log(LogType.WARNING, console_txt="ERROR: non-existent REPODIR: " + rdir, err_code=4)
     else:
-        log(LogType.WARNING, console_txt="Warning - {} was not removed - not found".format(repo_db_file))
+        log(console_txt="* Repository location: " + rdir)
+    if not os.path.exists(bdir):
+        log(LogType.WARNING, console_txt="ERROR: non-existent REPODIR: " + bdir, err_code=4)
+    else:
+        log(console_txt="* Build/temp. directory: " + bdir)
+
+
+def update_repo_file(repo_file: str, repo_name: str, repo_dir: str) -> None:
+    log(LogType.BOLD, console_txt="* Updating local repo db file: {}".format(repo_file))
+    if os.path.isfile(repo_file):
+        os.remove(repo_file)
+    else:
+        log(LogType.WARNING, console_txt="Warning - {} was not removed - not found".format(repo_file))
     # creating new one
     try:
-        pr = subprocess.Popen("repo-add " + repo_db_file + " " + repodir + package_regexp, shell=True)
+        pr = subprocess.Popen("repo-add " + repo_file + " " + repo_dir + package_regexp, shell=True)
         rc = pr.wait()
         if rc != 0:
             log(LogType.WARNING, console_txt="ERROR: repo-add returned: {}".format(rc))
-            raise
+            raise ValueError("Building failed with RC: {}".format(rc))
         log(console_txt="   ")
         log(LogType.BOLD, console_txt="* To use the repo you need following two lines in /etc/pacman.conf")
         log(LogType.CUSTOM,
-            HIGHLIGHT + "    [" + reponame + "]" + UNCOLOR + "                          # repository will be named '" + reponame + "'")
-        log(LogType.HIGHLIGHT, console_txt="    Server = file://" + repodir)
+            HIGHLIGHT + "    [" + repo_name + "]" + UNCOLOR + "                          # repository will be named '" + repo_name + "'")
+        log(LogType.HIGHLIGHT, console_txt="    Server = file://" + repo_dir)
         log(console_txt=
             " Also note that all pkg packages present in repodir was put into repo db file, not only those in your config file.")
-    except:
-        log(LogType.ERROR, console_txt="   repodb file creation failed")
+    except Exception as e:
+        text = "   repodb file creation failed with {}".format(str(e))
+        log(LogType.ERROR, console_txt=text, log_txt=text, err_code=11)
+
+
+if __name__ == "__main__":
+
+    if getpass.getuser() == "root":
+        log(LogType.ERROR, console_txt="root is not allowed to run this tool", err_code=10)
+
+    log(console_txt=" [REPOKEEPER v. " + version + "]")
+    log(log_txt="starting at " + time.strftime("%d %b %Y %H:%M:%S", time.localtime()))
+
+    # parsing conffile
+    log(console_txt="* Parsing configuration file...")
+    builddir, repodir, pkgs_conf = parse_conffile(conffileloc)
+    time.sleep(1)
+
+    # testing existence of repordir and builddir
+    folder_check(builddir, repodir, conffileloc)
+
+    # finding what is in localrepo directory
+    older_packages, not_in_repo, latest_in_repo = parse_localrepo(repodir)  # also prints out packages in localrepo
+    time.sleep(1)
+
+    # checking what is in AUR and what version
+    if len(pkgs_conf) > 0:
+        # print(latest_in_repo)
+        pkgs_to_built = check_aur_web(pkgs_conf, latest_in_repo)  # also print out output from aur check
+    else:
+        pkgs_to_built = {}
+
+    print(" ")
+    if len(pkgs_to_built) > 0:
+        log(LogType.BOLD, console_txt="* Building packages...")
+    else:
+        print(BOLD + "* Nothing to build..." + UNCOLOR)
+        log(log_txt="\nNo packages to be build")
+
+    # iterating and updating packages in pkgs_to_built list
+    time.sleep(1)
+
+    building(pkgs_to_built)
+
+    # updating repository
+    time.sleep(1)
+    update_repo_file(repodir + reponame + ".db.tar.gz", reponame, repodir)
 
     # parsing local repo to identify outdated packages
-    older_packages, packages_not_required, latest_in_repo = parse_localrepo()
+    older_packages, packages_not_required, latest_in_repo = parse_localrepo(repodir)
     if len(older_packages) > 0:
         log(log_txt="\nFollowing packages has newer versions and might be deleted from your repo:")
         for item in older_packages:
