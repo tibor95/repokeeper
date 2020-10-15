@@ -7,7 +7,8 @@ For Arch Linux only !!!
 BASIC SETUP:
 First you need the config file where you list packages that will be kept
 in your local repo. Expected location is in /etc/repokeeper.conf.
-Then you need 2 directories where packages will be built and stored.
+Then you need 2 directories where packages will be built and stored, defined
+in config file
 
 Anyway, if you run repokeeper.py without any preparation, it will navigate 
 you what to do...
@@ -21,7 +22,8 @@ packages
 5. Regenerates repo db file. Note, it puts there all pkgs located in repo dir,
 even those that are not in your config file. Repokeeper doesnt delete any
 packages from repo directory, you have to do it by hand. Afterwards you 
-can re-run repokeeper to rebuild repo db file.
+can re-run repokeeper to rebuild repo db file, to get rid of entries for deleted
+packages.
 
 ADDING REPOSITORY INTO /etc/pacman.conf
 at the end of repokeeper.py output, you will see two lines that have to be

@@ -33,7 +33,7 @@ from enum import Enum
 
 # DEFINING VARIABLES
 # defaults:
-reponame = "local-rk"
+reponame = "local-rk"  # overwritten by config file
 conffileloc = "/etc/repokeeper.conf"
 logfile = "/tmp/repokeeper.log"
 BOLD = "\033[1m"
@@ -185,7 +185,7 @@ def printfirsttimenote():
     log(console_txt="When done, re-run the repokeeper.py.")
 
 
-def parse_conffile(conffileloc: str) -> Tuple[str, str, List[str]]:
+def parse_conffile(conffileloc: str, repo_name: str) -> Tuple[str, str, List[str], str]:
     # searching for conf file, /etc/repokeeper.conf is preffered
     if not os.path.isfile(conffileloc):
         log(LogType.WARNING, console_txt="FAILED to open configuration file: " + conffileloc, err_code=6)
@@ -223,7 +223,7 @@ def parse_conffile(conffileloc: str) -> Tuple[str, str, List[str]]:
                         repodir = repodir + '/'
 
                 if line.replace(' ', '').split('=')[0] == "reponame":
-                    reponame = line.replace(' ', '').split('=')[1].replace("\n", "")
+                    repo_name = line.replace(' ', '').split('=')[1].replace("\n", "")
 
                 if line.replace(' ', '').split('=')[0] == "builddir":
                     builddir = line.replace(' ', '').split('=')[1].replace("\n", "")
@@ -241,7 +241,7 @@ def parse_conffile(conffileloc: str) -> Tuple[str, str, List[str]]:
         log(LogType.WARNING, console_txt="  ! No packages found in config file, going on anyway...")
     else:
         log(console_txt="  Packages in your conf file: " + ' '.join(item for item in packages))
-    return builddir, repodir, packages
+    return builddir, repodir, packages, repo_name
 
 
 def fetch_pck_info_from_aur_web(pck: str) -> Optional[Dict]:
@@ -414,7 +414,7 @@ if __name__ == "__main__":
 
     # parsing conffile
     log(console_txt="* Parsing configuration file...")
-    builddir, repodir, pkgs_conf = parse_conffile(conffileloc)
+    builddir, repodir, pkgs_conf, reponame = parse_conffile(conffileloc, reponame)
     time.sleep(1)
 
     # testing existence of repordir and builddir
@@ -450,11 +450,13 @@ if __name__ == "__main__":
     # parsing local repo to identify outdated packages
     older_packages, packages_not_required, latest_in_repo = parse_localrepo(repodir)
     if len(older_packages) > 0:
+        log(console_txt="There are {} old files (packages) in your local repo folder".format(len(older_packages)))
         log(log_txt="\nFollowing packages has newer versions and might be deleted from your repo:")
         for item in older_packages:
             log(log_txt="rm {} ;".format(item.file))
 
     if len(packages_not_required) > 0:
+        log(console_txt="There are {} files (packages) in your local repo folder not required by config file".format(len(packages_not_required)))
         log(log_txt="\nFollowing packages are not listed in your repokeeper.conf and might \
     be deleted from your repo (just copy&paste it en block into a console):")
         for item in packages_not_required:
