@@ -19,6 +19,7 @@ except:
         exit()
 
 import json, os, tarfile, shutil, subprocess, time, glob, sys, signal
+from config_parser import get_conf_content
 
 
 try:
@@ -186,65 +187,6 @@ def printfirsttimenote():
     log(console_txt="When done, re-run the repokeeper.py.")
 
 
-def parse_conffile(conffileloc: str, repo_name: str) -> Tuple[str, str, List[str], str]:
-    # searching for conf file, /etc/repokeeper.conf is preffered
-    if not os.path.isfile(conffileloc):
-        log(LogType.WARNING, console_txt="FAILED to open configuration file: " + conffileloc, err_code=6)
-    log(console_txt="  Using configuration file: " + conffileloc)
-    packages: List[str] = []
-
-    with open(conffileloc, 'r') as repolistf:
-        mode = "none"
-        for line in repolistf:
-            line = line.split('#')[0]
-            if len(line) < 3:
-                continue
-            elif line.replace(' ', '').split('=')[0] == "firsttimemode":
-                firsttimemode = line.replace(' ', '').split('=')[1].replace("\n", "")
-                if firsttimemode == "yes":
-                    printfirsttimenote()
-                    exit(2)
-                continue
-            elif line.startswith("[packages]"):
-                mode = "packages"
-                continue
-            elif line.startswith("[options]"):
-                mode = "options"
-                continue
-            elif mode == "packages":
-                pck = line.split(' ')[0].replace("\n", "")
-                if pck in packages:
-                    log(console_txt="{} repeated in config file".format(pck))
-                else:
-                    packages.append(pck)
-            elif mode == "options":
-                if line.replace(' ', '').split('=')[0] == "repodir":
-                    repodir = line.replace(' ', '').split('=')[1].replace("\n", "")
-                    if not repodir.endswith('/'):
-                        repodir = repodir + '/'
-
-                if line.replace(' ', '').split('=')[0] == "reponame":
-                    repo_name = line.replace(' ', '').split('=')[1].replace("\n", "")
-
-                if line.replace(' ', '').split('=')[0] == "builddir":
-                    builddir = line.replace(' ', '').split('=')[1].replace("\n", "")
-                    if not builddir.endswith('/'):
-                        builddir = builddir + '/'
-
-                if line.replace(' ', '').split('=')[0] == "colors":
-                    if line.replace(' ', '').split('=')[1].replace("\n", "") == "off":
-                        log(console_txt="   Collors off..")
-                        BOLD = ''
-                        WARNING = ''
-                        UNCOLOR = ''
-
-    if len(packages) == 0:
-        log(LogType.WARNING, console_txt="  ! No packages found in config file, going on anyway...")
-    else:
-        log(console_txt="  Packages in your conf file: " + ' '.join(item for item in packages))
-    return builddir, repodir, packages, repo_name
-
-
 def fetch_pck_info_from_aur_web(pck: str) -> Optional[Dict]:
     response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
     html = response.read()
@@ -389,7 +331,7 @@ def update_repo_file(repo_file: str, repo_name: str, repo_dir: str) -> None:
         log(LogType.WARNING, console_txt="Warning - {} was not removed - not found".format(repo_file))
     # creating new one
     try:
-        pr = subprocess.Popen("repo-add " + repo_file + " " + repo_dir + package_regexp, shell=True)
+        pr = subprocess.Popen("repo-add " + repo_file + " " + os.path.join(repo_dir, package_regexp), shell=True)
         rc = pr.wait()
         if rc != 0:
             log(LogType.WARNING, console_txt="ERROR: repo-add returned: {}".format(rc))
@@ -416,7 +358,9 @@ if __name__ == "__main__":
 
     # parsing conffile
     log(console_txt="* Parsing configuration file...")
-    builddir, repodir, pkgs_conf, reponame = parse_conffile(conffileloc, reponame)
+    pkgs_conf, repodir, builddir, reponame = get_conf_content(conffileloc, reponame)
+    print(pkgs_conf)
+    #builddir, repodir, pkgs_conf, reponame = parse_conffile(conffileloc, reponame)
     time.sleep(1)
 
     # testing existence of repordir and builddir
@@ -447,7 +391,7 @@ if __name__ == "__main__":
 
     # updating repository
     time.sleep(1)
-    update_repo_file(repodir + reponame + ".db.tar.gz", reponame, repodir)
+    update_repo_file(os.path.join(repodir, reponame + ".db.tar.gz"), reponame, repodir)
 
     # parsing local repo to identify outdated packages
     older_packages, packages_not_required, latest_in_repo = parse_localrepo(repodir)
