@@ -10,6 +10,7 @@ license=('GPL3')
 makedepends=()
 source=("https://github.com/tibor95/repokeeper.git#commit=1234abcd")
 md5sums=('SKIP')
+backup=('etc/repokeeper.conf')
 
 package() {
     install -D -m0755 ${srcdir}/${pkgname}/repokeeper.py ${pkgdir}/usr/bin/repokeeper.py

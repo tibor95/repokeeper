@@ -20,6 +20,7 @@ except:
 
 import json, os, tarfile, shutil, subprocess, time, glob, sys, signal
 
+
 try:
     from pkg_resources import parse_version
 except:
@@ -329,11 +330,12 @@ def building(pkgs: Dict[str, str]) -> None:
         empty_dir(builddir)
 
         # downloading package into builddir
-        localarchive = builddir + package
+        localarchive = builddir + package+"_tmp"
         urlretrieve(url, localarchive)
 
         # unpacking
-        tararchive = tarfile.open(localarchive, "r:gz")
+        #uncompress(localarchive)
+        tararchive = tarfile.open(localarchive, "r:*")
         tararchive.extractall(builddir)
 
         # defining work directory
