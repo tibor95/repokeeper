@@ -2,7 +2,7 @@ import os
 
 from setuptools import find_packages, setup
 
-from repokeeper import get_version
+from repokeeper.repokeeper import get_version
 
 
 setup(
