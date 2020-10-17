@@ -19,7 +19,8 @@ setup(
     python_requires='>=3.4',
     install_requires=[
         'config_parser',
-        'signal'
+        'signal',
+        'setuptools'
     ],
     entry_points={
         'console_scripts': [
