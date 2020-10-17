@@ -351,6 +351,9 @@ def update_repo_file(repo_file: str, repo_name: str, repo_dir: str) -> None:
 
 
 if __name__ == "__main__":
+    main()
+
+def main():
 
     if getpass.getuser() == "root":
         log(LogType.ERROR, console_txt="root is not allowed to run this tool", err_code=10)

@@ -23,7 +23,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'repokeeper = repokeeper.__main__:main'
+            'repokeeper = repokeeper.repokeeper:main'
         ]
     },
     long_description="""\
