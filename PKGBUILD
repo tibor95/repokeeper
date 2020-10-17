@@ -8,7 +8,7 @@ arch=('any')
 url="https://github.com/tibor95/repokeeper"
 license=('GPL3')
 makedepends=()
-source=("https://github.com/tibor95/repokeeper.git#commit=1234abcd")
+source=("git+https://github.com/tibor95/repokeeper.git#commit=1234abcd")
 md5sums=('SKIP')
 backup=('etc/repokeeper.conf')
 
