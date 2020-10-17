@@ -18,16 +18,9 @@ except:
         print(" or urllib.request package for python3 installed")
         exit()
 
-import json, os, tarfile, shutil, subprocess, time, glob, sys, signal
+import json, os, tarfile, shutil, subprocess, time, glob, sys, signal, packaging
 from repokeeper.config_parser import get_conf_content
 
-
-try:
-    from pkg_resources import parse_version
-except:
-    print(" ERROR Failed to import pkg_resources module. You need to have package python-distribute")
-    print(" for python3 or python2-distribute for python2 installed. Quitting...")
-    exit()
 
 import getpass
 from typing import List, Tuple, Optional, Dict
@@ -63,6 +56,12 @@ def signal_handler(signal, frame):
 
 
 signal.signal(signal.SIGINT, signal_handler)
+
+def parse_versiont(vers_str: str) -> str:
+    try:
+        return packaging.version.Version(vers_str)
+    except:
+        raise ValueError("Failed to parse version from: {}".format(vers_str))
 
 
 def log(logtype: LogType = LogType.NORMAL, console_txt: Optional[str] = None, log_txt: Optional[str] = None,

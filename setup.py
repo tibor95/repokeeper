@@ -20,7 +20,7 @@ setup(
     install_requires=[
         'config_parser',
         'signal',
-        'setuptools'
+        'packaging'
     ],
     entry_points={
         'console_scripts': [
