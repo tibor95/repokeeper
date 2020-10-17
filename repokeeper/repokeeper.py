@@ -19,7 +19,7 @@ except:
         exit()
 
 import json, os, tarfile, shutil, subprocess, time, glob, sys, signal
-from config_parser import get_conf_content
+from repokeeper.config_parser import get_conf_content
 
 
 try:
