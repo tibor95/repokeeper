@@ -55,6 +55,8 @@ class LogType(Enum):
     CUSTOM = 4
     HIGHLIGHT = 5
 
+def get_version():
+    return "3.0.1"
 
 def signal_handler(signal, frame):
     log(console_txt="\nSIGINT signal received. Quitting...", err_code=0)

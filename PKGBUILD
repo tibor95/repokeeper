@@ -13,6 +13,7 @@ md5sums=('SKIP')
 backup=('etc/repokeeper.conf')
 
 package() {
-    install -D -m0755 ${srcdir}/${pkgname}/repokeeper.py ${pkgdir}/usr/bin/repokeeper.py
+    cd ${srcdir}/${pkgname}
+    python3 setup.py -q install --root="$pkgdir"
     install -D -m0666 ${srcdir}/${pkgname}/repokeeper.conf ${pkgdir}/etc/repokeeper.conf
 }
