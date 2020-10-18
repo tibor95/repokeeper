@@ -1,7 +1,7 @@
 
 pkgbase=repokeeper
 pkgname=repokeeper
-pkgver=0.3.0
+pkgver=0.3.1
 pkgrel=1
 pkgdesc="AUR package repository keeper"
 arch=('any')
