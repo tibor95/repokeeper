@@ -34,9 +34,6 @@ Built packages are available to pacman as onw local repository. Pacman has to be
 """,
     long_description_content_type='text/x-rst',
     data_files=[
-        # By filtering on `os.path.exists`, install should succeed even when
-        #   the compressed manual page is not available (iterable would be empty).
-        ('share/man/man1', filter(os.path.exists, ['dist/archey.1.gz'])),
         ('share/doc/repokeeper', ['README.md'])
     ],
     zip_safe=False,

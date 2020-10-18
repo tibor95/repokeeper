@@ -59,6 +59,10 @@ class Logger(object):
     _UNCOLOR = "\033[0m"
     __logfile = "/tmp/repokeeper.log"
 
+    @property
+    def logfile(self):
+        return Logger.__logfile
+
     def log(self, logtype: LogType = LogType.NORMAL, console_txt: Optional[str] = None, log_txt: Optional[str] = None,
             err_code: int = -1, log_eof: str = "\n"):
 
@@ -125,25 +129,21 @@ class Repo_Base(object):
         # defaults:
         self.conffileloc = "/etc/repokeeper.conf"
         self.package_regexp = "*pkg.tar.zst"
-        # parsing conffile
         self.lo = Logger()
         self.lo.log(console_txt="* Parsing configuration file...")
         self.latest_in_repo: Dict[str, pkg_identification] = {}
         self.pkgs_conf, self.repodir, self.builddir, self.reponame = get_conf_content(self.conffileloc, "local-rk")
         time.sleep(1)
 
-    def parse_localrepo(self) -> Tuple[
-        List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
-        # receives:
-        # Dictionary of pkg_name:pkg_identification
-        # returns:
-        # files for required packages, but having newer version
-        # required packages, that are not in repo
-
-        # getting a list of files (packages) in repo
+    def list_files_in_repo(self) -> List[str]:
         files = []
         files.extend(glob.glob(self.repodir + "/" + self.package_regexp))
-        files = list(set(files))  # removing duplicates
+        return list(set(files))  # removing duplicates
+
+    def parse_localrepo(self) -> Tuple[
+        List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
+
+        files = self.list_files_in_repo()
 
         in_repo_not_required: List[pkg_identification] = []  # list of files for packages not defined in repo.conf
         for file in files:
@@ -172,6 +172,12 @@ class Repo_Base(object):
             if latest is not None:
                 newest_required_in_repo[app_name] = latest
 
+        self.print_repo_summary(required_but_with_newer_version, in_repo_not_required, newest_required_in_repo)
+
+        return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
+
+    def print_repo_summary(self, required_but_with_newer_version: List[pkg_identification],
+        in_repo_not_required: List[pkg_identification], newest_required_in_repo: Dict[str, "pkg_identification"]):
         # printing what is in repository with latest versions
         strcurrepo = ""
         for k, v in newest_required_in_repo.items():
@@ -181,9 +187,7 @@ class Repo_Base(object):
         self.lo.log(console_txt=strcurrepo)
         if len(required_but_with_newer_version) > 0 or len(in_repo_not_required) > 0:
             self.lo.log(LogType.BOLD,
-                console_txt="* View the log file " + Logger.__logfile + " for a list of outdated packages or packages not listed in your conf file.")
-        return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
-
+                console_txt="* View the log file " + self.lo.logfile + " for a list of outdated packages or packages not listed in your conf file.")
 
     def fetch_pck_info_from_aur_web(self, pck: str) -> Optional[Dict]:
         response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
