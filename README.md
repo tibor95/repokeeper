@@ -4,6 +4,9 @@ is tool that helps you to maintain own local database of packages buid from aur
 
 For Arch Linux only !!!
 
+HOMEPAGE:
+https://github.com/tibor95/repokeeper
+
 BASIC SETUP:
 You need to edit /etc/repokeeper.conf. Especially you will need two directories -
 one as building / working directory another one as permanent storage of generated
@@ -33,12 +36,9 @@ The default is local-rk, in this case no entry in /etc/repokeeper.conf
 is needed.
 
 
-
 Feedback welcomed
 
-https://github.com/tibor95/repokeeper/
 
-
-October 12, 2020
+October 18, 2020
 
 
