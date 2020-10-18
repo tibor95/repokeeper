@@ -1,4 +1,4 @@
-
+# Maintainer: Tibor Bamhor <tiborb95 at gmail dot com>
 pkgbase=repokeeper
 pkgname=repokeeper
 pkgver=0.3.1
