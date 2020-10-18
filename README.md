@@ -5,9 +5,11 @@ is tool that helps you to maintain own local database of packages buid from aur
 For Arch Linux only !!!
 
 HOMEPAGE:
+
 https://github.com/tibor95/repokeeper
 
 BASIC SETUP:
+
 You need to edit /etc/repokeeper.conf. Especially you will need two directories -
 one as building / working directory another one as permanent storage of generated
 packages.
@@ -15,6 +17,7 @@ packages.
 Anyway, if you run repokeeper.py without any preparation, no harm will be done...
 
 HOW IT WORKS:
+
 1. It reads config file to find out what packages you want to have in your repo
 2. It checks actual versions of those packages in your repo
 3. It sends query to AUR website to find out what are latest version of those
@@ -26,7 +29,8 @@ packages from repo directory, you have to do it by hand. Afterwards you
 can re-run repokeeper to rebuild repo db file, to get rid of entries for deleted
 packages.
 
-ADDING REPOSITORY INTO /etc/pacman.conf
+ADDING REPOSITORY INTO /etc/pacman.conf:
+
 at the end of repokeeper.py output, you will see two lines that have to be
 added to/present in pacman.conf. Afterwards ussual command "pacman -Sy" will
 fetch data also from your local repository.
