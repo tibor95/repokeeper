@@ -407,7 +407,7 @@ def main():
     older_packages, packages_not_required, rp.latest_in_repo = rp.parse_localrepo()
     if len(older_packages) > 0:
         #rp.lo.log(console_txt="* There are {} old files (packages) in your local repo folder, see the log file".format(len(older_packages)))
-        rp.lo.log(log_txt="\nFollowing packages has newer versions and might be deleted from your repo:")
+        rp.lo.log(log_txt="\nFollowing files/packages have newer version in the repo and might be deleted from the repo folder:")
         for item in older_packages:
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
