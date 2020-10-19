@@ -88,7 +88,7 @@ class Logger(object):
         if isinstance(console_txt, str):
             print(open_col + console_txt + Logger._UNCOLOR)
         if isinstance(log_txt, str):
-            with open(Logger.__logfile, 'w', 1) as lf:
+            with open(Logger.__logfile, 'a', 1) as lf:
                 lf.write(log_txt + log_eof)
         if err_code >= 0:
             sys.exit(err_code)
@@ -404,14 +404,14 @@ def main():
     # parsing local repo to identify outdated packages
     older_packages, packages_not_required, rp.latest_in_repo = rp.parse_localrepo()
     if len(older_packages) > 0:
-        rp.lo.log(console_txt="There are {} old files (packages) in your local repo folder".format(len(older_packages)))
+        rp.lo.log(console_txt="* There are {} old files (packages) in your local repo folder, see the log file".format(len(older_packages)))
         rp.lo.log(log_txt="\nFollowing packages has newer versions and might be deleted from your repo:")
         for item in older_packages:
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(packages_not_required) > 0:
         rp.lo.log(
-            console_txt="There are {} files (packages) in your local repo folder not required by config file".format(
+            console_txt="* There are {} files (packages) in your local repo folder not required by config file, see the log file".format(
                 len(packages_not_required)))
         rp.lo.log(log_txt="\nFollowing packages are not listed in your repokeeper.conf and might \
     be deleted from your repo (just copy&paste it en block into a console):")
