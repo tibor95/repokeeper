@@ -8,7 +8,7 @@ arch=('any')
 url="https://github.com/tibor95/repokeeper"
 license=('GPL3')
 depends=('python')
-makedepends=('git', 'python-setuptools')
+makedepends=('git' 'python-setuptools')
 source=("git+https://github.com/tibor95/repokeeper.git#commit=1234abcd")
 md5sums=('SKIP')
 backup=('etc/repokeeper.conf')

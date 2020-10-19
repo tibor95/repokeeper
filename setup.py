@@ -25,15 +25,15 @@ setup(
         ]
     },
     long_description="""\
-Repokeeper helps you to keep (update) local repository of AUR packages. It parses your config file for intended packages, 
-then queries AUR web page to find out actual version, compare it with versions in your repository and builds 
+Repokeeper helps you to keep (update) local repository of AUR packages. It parses your config file for intended packages,
+then queries AUR web page to find out actual version, compare it with versions in your repository and builds
 new packages if needed. Your local repository should be configured in pacman.conf so that pacman can treat the repo
 the same as other regular on-line ones.
 """,
     long_description_content_type='text/x-rst',
     data_files=[
         ('share/doc/repokeeper', ['README.md']),
-        ('usr/local/man/man8/', ['repokeeper.1'])
+        ('local/man/man8/', ['repokeeper.1'])
     ],
     zip_safe=False,
     classifiers=[
