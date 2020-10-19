@@ -79,7 +79,7 @@ class Logger(object):
         if logtype == LogType.WARNING:
             open_col = self._WARNING
         elif logtype == LogType.ERROR:
-            open_col = Logger._WARNING + Logger.__BOLD
+            open_col = Logger._WARNING + Logger._BOLD
         elif logtype == LogType.HIGHLIGHT:
             open_col = Logger._HIGHLIGHT
         else:
@@ -198,7 +198,9 @@ class Repo_Base(object):
         self.lo.log(console_txt=strcurrepo)
         if len(required_but_with_newer_version) > 0 or len(in_repo_not_required) > 0:
             self.lo.log(LogType.BOLD,
-                        console_txt="* View the log file {} for a list of outdated packages [{}] or packages not listed in your conf file [{}}.".format(self.lo.logfile, len(required_but_with_newer_version), len(in_repo_not_required)))
+                        console_txt="* View the log file {} for a list of outdated packages [{}] or packages not listed in your conf file [{}].".format(self.lo.logfile,
+                        len(required_but_with_newer_version),
+                        len(in_repo_not_required)))
 
     def fetch_pck_info_from_aur_web(self, pck: str) -> Optional[Dict]:
         response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
