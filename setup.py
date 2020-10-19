@@ -33,7 +33,7 @@ the same as other regular on-line ones.
     long_description_content_type='text/x-rst',
     data_files=[
         ('share/doc/repokeeper', ['README.md']),
-        ('local/man/man8/', ['repokeeper.1'])
+        ('local/man/uk/man8/', ['repokeeper.1'])
     ],
     zip_safe=False,
     classifiers=[
