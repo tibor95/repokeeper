@@ -198,7 +198,7 @@ class Repo_Base(object):
         self.lo.log(console_txt=strcurrepo)
         if len(required_but_with_newer_version) > 0 or len(in_repo_not_required) > 0:
             self.lo.log(LogType.BOLD,
-                        console_txt="* View the log file " + self.lo.logfile + " for a list of outdated packages or packages not listed in your conf file.")
+                        console_txt="* View the log file {} for a list of outdated packages [{}] or packages not listed in your conf file [{}}.".format(self.lo.logfile, len(required_but_with_newer_version), len(in_repo_not_required)))
 
     def fetch_pck_info_from_aur_web(self, pck: str) -> Optional[Dict]:
         response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
@@ -404,15 +404,15 @@ def main():
     # parsing local repo to identify outdated packages
     older_packages, packages_not_required, rp.latest_in_repo = rp.parse_localrepo()
     if len(older_packages) > 0:
-        rp.lo.log(console_txt="* There are {} old files (packages) in your local repo folder, see the log file".format(len(older_packages)))
+        #rp.lo.log(console_txt="* There are {} old files (packages) in your local repo folder, see the log file".format(len(older_packages)))
         rp.lo.log(log_txt="\nFollowing packages has newer versions and might be deleted from your repo:")
         for item in older_packages:
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(packages_not_required) > 0:
-        rp.lo.log(
-            console_txt="* There are {} files (packages) in your local repo folder not required by config file, see the log file".format(
-                len(packages_not_required)))
+        #rp.lo.log(
+        #    console_txt="* There are {} files (packages) in your local repo folder not required by config file, see the log file".format(
+        #        len(packages_not_required)))
         rp.lo.log(log_txt="\nFollowing packages are not listed in your repokeeper.conf and might \
     be deleted from your repo (just copy&paste it en block into a console):")
         for item in packages_not_required:
