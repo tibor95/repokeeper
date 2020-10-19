@@ -1,26 +1,23 @@
-import os
-
 from setuptools import find_packages, setup
-
 from repokeeper.repokeeper import get_version
 
 
 setup(
     name='repokeeper',
     version=get_version(),
-    description='repokeeper is python helper to keep local repository based on AUR packages',
-    keywords='repokeeper python3 archlinux aur',
+    description='repokeeper is python helper to keep local repository of built AUR packages',
+    keywords='repohelper python3 archlinux aur pacman',
     url='https://github.com/tibor95/repokeeper',
     author='Tibor Bamhor',
     author_email='tiborb95@gmail.com',
     license='GPLv3',
     packages=find_packages(),
-    #test_suite='',
     python_requires='>=3.4',
     install_requires=[
         'config_parser',
         'signal',
-        'packaging'
+        'packaging',
+        'argsparse'
     ],
     entry_points={
         'console_scripts': [
@@ -28,13 +25,15 @@ setup(
         ]
     },
     long_description="""\
-Repokeeper is a python script that parses your config file for intended packages, then
-compares AUR db with you local repository and builds new packages if needed.
-Built packages are available to pacman as onw local repository. Pacman has to be configured for it
+Repokeeper helps you to keep (update) local repository of AUR packages. It parses your config file for intended packages,
+then queries AUR web page to find out actual version, compare it with versions in your repository and builds
+new packages if needed. Your local repository should be configured in pacman.conf so that pacman can treat the repo
+the same as other regular on-line ones.
 """,
     long_description_content_type='text/x-rst',
     data_files=[
-        ('share/doc/repokeeper', ['README.md'])
+        ('share/doc/repokeeper', ['README.md']),
+        ('share/man/uk/man1/', ['repokeeper.1'])
     ],
     zip_safe=False,
     classifiers=[

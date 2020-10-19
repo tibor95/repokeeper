@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Repokeeper - creates and maintain local repository from AUR packages
-# for ARCH LINUX!
-# dependencies: python-simplejson,python-distribute
-# contact: tiborb95 at gmail dot com
 
 # IMPORTING MODULES
 try:
@@ -18,10 +15,9 @@ except:
         print(" or urllib.request package for python3 installed")
         exit()
 
-import json, os, tarfile, shutil, subprocess, time, glob, sys, signal
+import json, os, tarfile, shutil, subprocess, time, glob, sys, signal, argparse
 from packaging import version
 from repokeeper.config_parser import get_conf_content
-
 
 import getpass
 from typing import List, Tuple, Optional, Dict
@@ -36,8 +32,20 @@ class LogType(Enum):
     CUSTOM = 4
     HIGHLIGHT = 5
 
+
 def get_version():
-    return "0.3.1"
+    return "0.3.2"
+
+
+def get_args():
+    parser = argparse.ArgumentParser(
+        description="Python tool for ArchLinux to maintain local repository of AUR packages. Updates packages listed in configuration file")
+    parser.add_argument("-v", "--version", action="store_true", default=False)
+
+    args = parser.parse_args()
+
+    return args.version
+
 
 def signal_handler(signal, frame):
     Logger().log(console_txt="\nSIGINT signal received. Quitting...", err_code=0)
@@ -45,11 +53,13 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
+
 def parse_version(vers_str: str) -> version.Version:
     try:
         return version.Version(vers_str)
     except:
         raise ValueError("Failed to parse version from: {}".format(vers_str))
+
 
 class Logger(object):
     # Could be singleton once
@@ -69,7 +79,7 @@ class Logger(object):
         if logtype == LogType.WARNING:
             open_col = self._WARNING
         elif logtype == LogType.ERROR:
-            open_col = Logger._WARNING + Logger.__BOLD
+            open_col = Logger._WARNING + Logger._BOLD
         elif logtype == LogType.HIGHLIGHT:
             open_col = Logger._HIGHLIGHT
         else:
@@ -78,7 +88,7 @@ class Logger(object):
         if isinstance(console_txt, str):
             print(open_col + console_txt + Logger._UNCOLOR)
         if isinstance(log_txt, str):
-            with open(Logger.__logfile, 'w', 1) as lf:
+            with open(Logger.__logfile, 'a', 1) as lf:
                 lf.write(log_txt + log_eof)
         if err_code >= 0:
             sys.exit(err_code)
@@ -94,7 +104,7 @@ class pkg_identification(object):
 
 
 def empty_dir(directory: str) -> None:  # recursivelly deletes content of given dir
-    lo=Logger()
+    lo = Logger()
     cmd = "rm -rf " + directory + "/*"
     if subprocess.call(cmd, shell=True) > 0:
         lo.log(LogType.WARNING, console_txt="Failed to clean up directory {}".format(directory))
@@ -177,17 +187,20 @@ class Repo_Base(object):
         return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
 
     def print_repo_summary(self, required_but_with_newer_version: List[pkg_identification],
-        in_repo_not_required: List[pkg_identification], newest_required_in_repo: Dict[str, "pkg_identification"]):
+                           in_repo_not_required: List[pkg_identification],
+                           newest_required_in_repo: Dict[str, "pkg_identification"]):
         # printing what is in repository with latest versions
         strcurrepo = ""
         for k, v in newest_required_in_repo.items():
             strcurrepo = strcurrepo + " " + newest_required_in_repo[k].file_basename + "-" + newest_required_in_repo[
                 k].version
-        self.lo.log(LogType.BOLD, console_txt = "* Newest versions of packages in your local repository:")
+        self.lo.log(LogType.BOLD, console_txt="* Newest versions of packages in your local repository:")
         self.lo.log(console_txt=strcurrepo)
         if len(required_but_with_newer_version) > 0 or len(in_repo_not_required) > 0:
             self.lo.log(LogType.BOLD,
-                console_txt="* View the log file " + self.lo.logfile + " for a list of outdated packages or packages not listed in your conf file.")
+                        console_txt="* View the log file {} for a list of outdated packages [{}] or packages not listed in your conf file [{}].".format(self.lo.logfile,
+                        len(required_but_with_newer_version),
+                        len(in_repo_not_required)))
 
     def fetch_pck_info_from_aur_web(self, pck: str) -> Optional[Dict]:
         response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
@@ -209,7 +222,6 @@ class Repo_Base(object):
             return None
 
         return data['results'][0]
-
 
     def check_aur_web(self) -> Dict[str, str]:
         pkgs_tobuild: Dict[str, str] = {}  # final dictionary (name:url) of packages to be updated
@@ -235,25 +247,18 @@ class Repo_Base(object):
 
                 elif parse_version(aurversion) < parse_version(curversion):
                     self.lo.log(console_txt=' {:<22s} - {:s} Local package newer({:s}), doing nothing'.format(pck,
-                                                                                                      aur_web_info[
-                                                                                                          'Version'],
-                                                                                                      aurversion))
+                                                                                                              aur_web_info[
+                                                                                                                  'Version'],
+                                                                                                              aurversion))
                 else:
                     self.lo.log(console_txt=' {:<22s} + updating {:s} -> {:s}'.format(pck, curversion,
-                                                                              aur_web_info['Version']))
+                                                                                      aur_web_info['Version']))
                     pkgs_tobuild[pck] = "http://aur.archlinux.org" + str(aur_web_info['URLPath'])
             time.sleep(0.5)
         return pkgs_tobuild
 
-
     def get_compiledir(self, package: str) -> str:
-        #if os.path.isfile(self.builddir + package + "/PKGBUILD"):
-        #    return self.builddir + package
-        #if os.path.isfile(self.builddir + package.lower() + "/PKGBUILD"):
-        #    return self.builddir + package.lower()
-        #if os.path.isfile(self.builddir + "/PKGBUILD"):
-        #    return self.builddir
-        # if the PKGBUILD was not found in reasonable location:
+        # Looking for PKGBUILD
         for root, dirs, files in os.walk(self.builddir):
             for ldir in dirs:
                 for root2, dirs2, files2 in os.walk(os.path.join(self.builddir, ldir)):
@@ -261,7 +266,6 @@ class Repo_Base(object):
                         if lfile == "PKGBUILD":
                             return os.path.join(root, ldir)
         raise ValueError("No PKGBUILD within {} folder".format(self.builddir))
-
 
     def building(self, pkgs: Dict[str, str]) -> None:
         # receving dictionary of package name : aur url
@@ -274,11 +278,11 @@ class Repo_Base(object):
             empty_dir(self.builddir)
 
             # downloading package into builddir
-            localarchive = os.path.join(self.builddir, package+"_tmp")
+            localarchive = os.path.join(self.builddir, package + "_tmp")
             urlretrieve(url, localarchive)
 
             # unpacking
-            #uncompress(localarchive)
+            # uncompress(localarchive)
             tararchive = tarfile.open(localarchive, "r:*")
             tararchive.extractall(self.builddir)
 
@@ -291,7 +295,7 @@ class Repo_Base(object):
                 self.lo.log(log_txt=text, console_txt=text)
                 if int(result) > 0:
                     text = "skipping next steps for the {}".format(package)
-                    self.lo.log(logtype = LogType.ERROR, log_txt=text, console_txt=text)
+                    self.lo.log(logtype=LogType.ERROR, log_txt=text, console_txt=text)
                     continue
 
             except Exception as e:
@@ -311,9 +315,9 @@ class Repo_Base(object):
                     time.sleep(4)
                 self.lo.log(console_txt=" ")
             if copied_count == 0:
-                self.lo.log(LogType.WARNING, console_txt="No final files found and copied from {}, teminating".format(compiledir),
-                    err_code=7)
-
+                self.lo.log(LogType.WARNING,
+                            console_txt="No final files found and copied from {}, teminating".format(compiledir),
+                            err_code=7)
 
     def folder_check(self) -> None:
         if self.repodir == "unset":
@@ -329,7 +333,6 @@ class Repo_Base(object):
         else:
             self.lo.log(console_txt="* Build/temp. directory: " + self.builddir)
 
-
     def update_repo_file(self) -> None:
         repo_file = os.path.join(self.repodir, self.reponame + ".db.tar.gz")
         self.lo.log(LogType.BOLD, console_txt="* Updating local repo db file: {}".format(repo_file))
@@ -339,7 +342,8 @@ class Repo_Base(object):
             self.lo.log(LogType.WARNING, console_txt="Warning - {} was not removed - not found".format(repo_file))
         # creating new one
         try:
-            pr = subprocess.Popen("repo-add " + repo_file + " " + os.path.join(self.repodir, self.package_regexp), shell=True)
+            pr = subprocess.Popen("repo-add " + repo_file + " " + os.path.join(self.repodir, self.package_regexp),
+                                  shell=True)
             rc = pr.wait()
             if rc != 0:
                 self.lo.log(LogType.WARNING, console_txt="ERROR: repo-add returned: {}".format(rc))
@@ -347,29 +351,27 @@ class Repo_Base(object):
             self.lo.log(console_txt="   ")
             self.lo.log(LogType.BOLD, console_txt="* To use the repo you need following two lines in /etc/pacman.conf")
             self.lo.log(LogType.CUSTOM,
-                Logger._HIGHLIGHT + "    [" + self.reponame + "]" + Logger._UNCOLOR + "                          # repository will be named '" + self.reponame + "'")
+                        Logger._HIGHLIGHT + "    [" + self.reponame + "]" + Logger._UNCOLOR + "                          # repository will be named '" + self.reponame + "'")
             self.lo.log(LogType.HIGHLIGHT, console_txt="    Server = file://" + self.repodir)
             self.lo.log(console_txt=
-                " Also note that all pkg packages present in repodir was put into repo db file, not only those in your config file.")
+                        " Also note that all pkg packages present in repodir was put into repo db file, not only those in your config file.")
         except Exception as e:
             text = "   repodb file creation failed with {}".format(str(e))
             self.lo.log(LogType.ERROR, console_txt=text, log_txt=text, err_code=11)
 
 
-if __name__ == "__main__":
-    main()
-
 def main():
+    print_version = get_args()
+    if print_version:
+        Logger().log(console_txt = get_version(), err_code = 0)
 
     rp = Repo_Base()
-
 
     if getpass.getuser() == "root":
         rp.lo.log(LogType.ERROR, console_txt="root is not allowed to run this tool", err_code=10)
 
     rp.lo.log(console_txt=" [REPOKEEPER v. {}]".format(get_version()))
     rp.lo.log(log_txt="starting at " + time.strftime("%d %b %Y %H:%M:%S", time.localtime()))
-
 
     # testing existence of repordir and builddir
     rp.folder_check()
@@ -389,7 +391,7 @@ def main():
     if len(pkgs_to_built) > 0:
         rp.lo.log(LogType.BOLD, console_txt="* Building packages...")
     else:
-        rp.lo.log(LogType.BOLD, console_txt ="* Nothing to build...")
+        rp.lo.log(LogType.BOLD, console_txt="* Nothing to build...")
         rp.lo.log(log_txt="\nNo packages to be build")
 
     # iterating and updating packages in pkgs_to_built list
@@ -404,13 +406,15 @@ def main():
     # parsing local repo to identify outdated packages
     older_packages, packages_not_required, rp.latest_in_repo = rp.parse_localrepo()
     if len(older_packages) > 0:
-        rp.lo.log(console_txt="There are {} old files (packages) in your local repo folder".format(len(older_packages)))
-        rp.lo.log(log_txt="\nFollowing packages has newer versions and might be deleted from your repo:")
+        #rp.lo.log(console_txt="* There are {} old files (packages) in your local repo folder, see the log file".format(len(older_packages)))
+        rp.lo.log(log_txt="\nFollowing files/packages have newer version in the repo and might be deleted from the repo folder:")
         for item in older_packages:
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(packages_not_required) > 0:
-        rp.lo.log(console_txt="There are {} files (packages) in your local repo folder not required by config file".format(len(packages_not_required)))
+        #rp.lo.log(
+        #    console_txt="* There are {} files (packages) in your local repo folder not required by config file, see the log file".format(
+        #        len(packages_not_required)))
         rp.lo.log(log_txt="\nFollowing packages are not listed in your repokeeper.conf and might \
     be deleted from your repo (just copy&paste it en block into a console):")
         for item in packages_not_required:
@@ -418,3 +422,7 @@ def main():
 
     rp.lo.log(log_txt="")
     rp.lo.log(log_txt="All done at {}, quitting ".format(time.strftime("%d %b %Y %H:%M:%S", time.localtime())))
+
+
+if __name__ == "__main__":
+    main()
