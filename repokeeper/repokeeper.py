@@ -150,7 +150,7 @@ class Repo_Base(object):
         files.extend(glob.glob(self.repodir + "/" + self.package_regexp))
         return list(set(files))  # removing duplicates
 
-    def parse_localrepo(self) -> Tuple[
+    def parse_localrepo(self, print_summary = True) -> Tuple[
         List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
 
         files = self.list_files_in_repo()
@@ -181,8 +181,8 @@ class Repo_Base(object):
             # now we have identified file for given aur name
             if latest is not None:
                 newest_required_in_repo[app_name] = latest
-
-        self.print_repo_summary(required_but_with_newer_version, in_repo_not_required, newest_required_in_repo)
+        if print_summary:
+            self.print_repo_summary(required_but_with_newer_version, in_repo_not_required, newest_required_in_repo)
 
         return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
 
@@ -277,12 +277,12 @@ class Repo_Base(object):
             # emptying builddir
             empty_dir(self.builddir)
 
-            # downloading package into builddir
+
+            # downloading package into builddir, appending _tmp to name to avoid overwriting of anything
             localarchive = os.path.join(self.builddir, package + "_tmp")
             urlretrieve(url, localarchive)
 
             # unpacking
-            # uncompress(localarchive)
             tararchive = tarfile.open(localarchive, "r:*")
             tararchive.extractall(self.builddir)
 
@@ -354,7 +354,8 @@ class Repo_Base(object):
                         Logger._HIGHLIGHT + "    [" + self.reponame + "]" + Logger._UNCOLOR + "                          # repository will be named '" + self.reponame + "'")
             self.lo.log(LogType.HIGHLIGHT, console_txt="    Server = file://" + self.repodir)
             self.lo.log(console_txt=
-                        " Also note that all pkg packages present in repodir was put into repo db file, not only those in your config file.")
+                        "* Note that all packages/files present in repository folder [{}] was put into repo db file, not only those in your config file.".format(
+                            self.repodir))
         except Exception as e:
             text = "   repodb file creation failed with {}".format(str(e))
             self.lo.log(LogType.ERROR, console_txt=text, log_txt=text, err_code=11)
@@ -377,7 +378,7 @@ def main():
     rp.folder_check()
 
     # finding what is in localrepo directory
-    rp.older_packages, rp.not_in_repo, rp.latest_in_repo = rp.parse_localrepo()  # also prints out packages in localrepo
+    rp.older_packages, rp.not_in_repo, rp.latest_in_repo = rp.parse_localrepo(print_summary=False)  # also prints out packages in localrepo
     time.sleep(1)
 
     # checking what is in AUR and what version
@@ -412,9 +413,7 @@ def main():
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(packages_not_required) > 0:
-        #rp.lo.log(
-        #    console_txt="* There are {} files (packages) in your local repo folder not required by config file, see the log file".format(
-        #        len(packages_not_required)))
+
         rp.lo.log(log_txt="\nFollowing packages are not listed in your repokeeper.conf and might \
     be deleted from your repo (just copy&paste it en block into a console):")
         for item in packages_not_required:

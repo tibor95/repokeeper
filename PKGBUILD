@@ -1,7 +1,7 @@
 # Maintainer: Tibor Bamhor <tiborb95 at gmail dot com>
 pkgbase=repokeeper
 pkgname=repokeeper
-pkgver=0.3.2
+pkgver=0.3.3
 pkgrel=1
 pkgdesc="Local AUR packages repository keeper and updater"
 arch=('any')

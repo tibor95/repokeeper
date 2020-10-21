@@ -8,13 +8,17 @@ HOMEPAGE:
 
 https://github.com/tibor95/repokeeper
 
+WIKI:
+
+https://github.com/tibor95/repokeeper/wiki
+
 BASIC SETUP:
 
 You need to edit /etc/repokeeper.conf. Especially you will need two directories -
 one as building / working directory another one as permanent storage of generated
 packages.
 
-Anyway, if you run repokeeper.py without any preparation, no harm will be done...
+Anyway, if you run repokeeper.py without any preparation no harm will be done...
 
 HOW IT WORKS:
 
@@ -43,6 +47,6 @@ is needed.
 Feedback welcomed
 
 
-October 18, 2020
+October 21, 2020
 
 
