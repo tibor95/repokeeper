@@ -34,14 +34,14 @@ class LogType(Enum):
 
 
 def get_version():
-    return "0.3.2"
+    return "0.3.4"
 
 
 def get_args():
     parser = argparse.ArgumentParser(
         description="Python tool for ArchLinux to maintain local repository of AUR packages. Updates packages listed in configuration file")
     parser.add_argument("-v", "--version", action="store_true", default=False)
-    parser.add_argument("--dryrun", action="store_true", default=False, description="Do not build nor recreate repo index")
+    parser.add_argument("--dryrun", action="store_true", default=False, help="Do not build nor recreate repo index")
 
     args = parser.parse_args()
 
@@ -401,7 +401,8 @@ def main():
 
     print(" ")
     if dry_run:
-        rp.lo.log(LogType.BOLD, console_txt="* Dry-run mode, quitting...", err_code=0)
+        text="Dry-run mode, quitting..."
+        rp.lo.log(LogType.BOLD, console_txt="* "+text, log_txt=text, err_code=0)
     if len(pkgs_to_built) > 0:
         rp.lo.log(LogType.BOLD, console_txt="* Building packages...")
     else:
