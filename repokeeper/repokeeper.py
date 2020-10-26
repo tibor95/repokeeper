@@ -277,6 +277,7 @@ class Repo_Base(object):
             # emptying builddir
             empty_dir(self.builddir)
 
+
             # downloading package into builddir, appending _tmp to name to avoid overwriting of anything
             localarchive = os.path.join(self.builddir, package + "_tmp")
             urlretrieve(url, localarchive)
@@ -412,9 +413,7 @@ def main():
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(packages_not_required) > 0:
-        #rp.lo.log(
-        #    console_txt="* There are {} files (packages) in your local repo folder not required by config file, see the log file".format(
-        #        len(packages_not_required)))
+
         rp.lo.log(log_txt="\nFollowing packages are not listed in your repokeeper.conf and might \
     be deleted from your repo (just copy&paste it en block into a console):")
         for item in packages_not_required:
