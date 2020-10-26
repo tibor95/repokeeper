@@ -41,10 +41,11 @@ def get_args():
     parser = argparse.ArgumentParser(
         description="Python tool for ArchLinux to maintain local repository of AUR packages. Updates packages listed in configuration file")
     parser.add_argument("-v", "--version", action="store_true", default=False)
+    parser.add_argument("--dryrun", action="store_true", default=False, description="Do not build nor recreate repo index")
 
     args = parser.parse_args()
 
-    return args.version
+    return args.version, args.dryrun
 
 
 def signal_handler(signal, frame):
@@ -267,8 +268,15 @@ class Repo_Base(object):
                             return os.path.join(root, ldir)
         raise ValueError("No PKGBUILD within {} folder".format(self.builddir))
 
-    def building(self, pkgs: Dict[str, str]) -> None:
-        # receving dictionary of package name : aur url
+    def building(self, pkgs: Dict[str, str]) -> List[str]:
+        """
+        Actual building the application and copying package files into repo directory
+        :param pkgs: Dictionary of package_name: aur_url_of_MAKEPKG
+        :return: List of failing packages, can be empty
+        """
+
+        failed_packages: List[str] = []
+
         for position, (package, url) in enumerate(pkgs.items()):
             text_body = package + " (" + str(position + 1) + "/" + str(
                 len(pkgs)) + ") - " + time.strftime("%H:%M:%S", time.localtime())
@@ -294,13 +302,14 @@ class Repo_Base(object):
                 text = " ( makepkg's return code: {} )".format(result)
                 self.lo.log(log_txt=text, console_txt=text)
                 if int(result) > 0:
-                    text = "skipping next steps for the {}".format(package)
-                    self.lo.log(logtype=LogType.ERROR, log_txt=text, console_txt=text)
-                    continue
+                    raise ValueError("makepkg failed with return code: {}".format(int(result)))
+
 
             except Exception as e:
                 self.lo.log(console_txt=" ERROR: Build of {} failed with: {}".format(package, str(e)))
+                failed_packages.append(package)
                 time.sleep(4)
+                continue
 
             self.lo.log(console_txt=" ")
             copied_count = 0
@@ -315,9 +324,11 @@ class Repo_Base(object):
                     time.sleep(4)
                 self.lo.log(console_txt=" ")
             if copied_count == 0:
-                self.lo.log(LogType.WARNING,
-                            console_txt="No final files found and copied from {}, teminating".format(compiledir),
-                            err_code=7)
+                text = "No package files found for {}".format(package)
+                self.lo.log(LogType.ERROR, console_txt=text, log_txt=text)
+                failed_packages.append(package)
+
+        return failed_packages
 
     def folder_check(self) -> None:
         if self.repodir == "unset":
@@ -362,7 +373,7 @@ class Repo_Base(object):
 
 
 def main():
-    print_version = get_args()
+    print_version, dry_run = get_args()
     if print_version:
         Logger().log(console_txt = get_version(), err_code = 0)
 
@@ -389,6 +400,8 @@ def main():
         pkgs_to_built = {}
 
     print(" ")
+    if dry_run:
+        rp.lo.log(LogType.BOLD, console_txt="* Dry-run mode, quitting...", err_code=0)
     if len(pkgs_to_built) > 0:
         rp.lo.log(LogType.BOLD, console_txt="* Building packages...")
     else:
@@ -398,7 +411,7 @@ def main():
     # iterating and updating packages in pkgs_to_built list
     time.sleep(1)
 
-    rp.building(pkgs_to_built)
+    failed_packages = rp.building(pkgs_to_built)
 
     # updating repository
     time.sleep(1)
@@ -407,7 +420,6 @@ def main():
     # parsing local repo to identify outdated packages
     older_packages, packages_not_required, rp.latest_in_repo = rp.parse_localrepo()
     if len(older_packages) > 0:
-        #rp.lo.log(console_txt="* There are {} old files (packages) in your local repo folder, see the log file".format(len(older_packages)))
         rp.lo.log(log_txt="\nFollowing files/packages have newer version in the repo and might be deleted from the repo folder:")
         for item in older_packages:
             rp.lo.log(log_txt="rm {} ;".format(item.file))
@@ -418,6 +430,10 @@ def main():
     be deleted from your repo (just copy&paste it en block into a console):")
         for item in packages_not_required:
             rp.lo.log(log_txt="rm {} ;".format(item.file))
+
+    if len(failed_packages) > 0:
+        text = "Following packages failed to be build: {}".format(', '.joint(failed_packages))
+        rp.lo.log(console_txt="* "+text, log_txt=text)
 
     rp.lo.log(log_txt="")
     rp.lo.log(log_txt="All done at {}, quitting ".format(time.strftime("%d %b %Y %H:%M:%S", time.localtime())))
