@@ -34,7 +34,7 @@ class LogType(Enum):
 
 
 def get_version():
-    return "0.3.4"
+    return "0.3.5"
 
 
 def get_args():
@@ -59,7 +59,7 @@ def parse_version(vers_str: str) -> version.Version:
     try:
         return version.Version(vers_str)
     except:
-        raise ValueError("Failed to parse version from: {}".format(vers_str))
+        raise ValueError("Failed to parse version from string: '{}'".format(vers_str))
 
 
 class Logger(object):
@@ -242,11 +242,17 @@ class Repo_Base(object):
                 pkgs_tobuild[pck] = str("http://aur.archlinux.org" + aur_web_info['URLPath'])
             else:
                 curversion = self.latest_in_repo[pck].version
-                if parse_version(aurversion) == parse_version(curversion):
+                try:
+                    curversion_obj = parse_version(curversion)
+                    aurversion_obj = parse_version(aurversion)
+                except Exception as e:
+                    text = ' ERROR with {}: {}'.format(pck, str(e))
+                    continue
+                if aurversion_obj == curversion_obj:
                     text = ' {:<22s} - {:s} In latest version, no need to update'.format(pck, aur_web_info['Version'])
                     self.lo.log(LogType.NORMAL, console_txt=text, log_txt=text)
 
-                elif parse_version(aurversion) < parse_version(curversion):
+                elif aurversion_obj < curversion_obj:
                     self.lo.log(console_txt=' {:<22s} - {:s} Local package newer({:s}), doing nothing'.format(pck,
                                                                                                               aur_web_info[
                                                                                                                   'Version'],
