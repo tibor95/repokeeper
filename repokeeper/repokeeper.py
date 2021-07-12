@@ -439,7 +439,7 @@ def main():
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(failed_packages) > 0:
-        text = "Following packages failed to be build: {}".format(', '.joint(failed_packages))
+        text = "Following packages failed to be build: {}".format(', '.join(failed_packages))
         rp.lo.log(console_txt="* "+text, log_txt=text)
 
     rp.lo.log(log_txt="")
