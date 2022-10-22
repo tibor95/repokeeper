@@ -18,5 +18,5 @@ def get_conf_content(conffile: str, reponame: str) -> Tuple[List[str], str, str,
 
         return packages, repo_dir, build_dir, repo_name
     except KeyError as ke:
-        raise ValueError("Config file parsing failed for missing key: {}".format(str(ke)))
+        raise ValueError(f"{str(ke)} not found in config file: {conffile}. Make sure config file is properly configured")
 

@@ -6,10 +6,12 @@
 try:
     from urllib import urlopen
     from urllib import urlretrieve
+    from urllib.error import HTTPError
 except:
     try:
         from urllib.request import urlopen
         from urllib.request import urlretrieve
+        from urllib.error import HTTPError
     except:
         print("ERROR: You need urllib package for python2")
         print(" or urllib.request package for python3 installed")
@@ -23,6 +25,15 @@ import getpass
 from typing import List, Tuple, Optional, Dict
 from enum import Enum
 
+class FailedPackage(object):
+    def __init__(self, name: str, reason:str) -> None:
+        self.name = name
+        self.reason = str(reason)
+
+class PackageToBuild(object):
+    def __init__(self, name: str, url: str) -> None:
+        self.name = name
+        self.url = url
 
 class LogType(Enum):
     NORMAL = 0
@@ -34,7 +45,7 @@ class LogType(Enum):
 
 
 def get_version():
-    return "0.3.5"
+    return "0.3.7"
 
 
 def get_args():
@@ -143,7 +154,10 @@ class Repo_Base(object):
         self.lo = Logger()
         self.lo.log(console_txt="* Parsing configuration file...")
         self.latest_in_repo: Dict[str, pkg_identification] = {}
-        self.pkgs_conf, self.repodir, self.builddir, self.reponame = get_conf_content(self.conffileloc, "local-rk")
+        try:
+            self.pkgs_conf, self.repodir, self.builddir, self.reponame = get_conf_content(self.conffileloc, "local-rk")
+        except Exception as e:
+            self.lo.log(LogType.ERROR, console_txt=str(e), log_txt=str(e), err_code=10)
         time.sleep(1)
 
     def list_files_in_repo(self) -> List[str]:
@@ -204,14 +218,19 @@ class Repo_Base(object):
                         len(in_repo_not_required)))
 
     def fetch_pck_info_from_aur_web(self, pck: str) -> Optional[Dict]:
-        response = urlopen('http://aur.archlinux.org/rpc.php?type=info&arg=' + pck)
+        url = f"https://aur.archlinux.org/rpc/?v=5&type=info&arg={pck}"
+        response = urlopen(url)
         html = response.read()
         data = json.loads(html.decode('utf-8'))
+
+        if "error" in data:
+            text = ' {:<22s} !  Error: {}'.format(pck, data["error"])
+            self.lo.log(LogType.NORMAL, console_txt=text, log_txt=text)
+            return None
 
         if data['type'] == 'error' or data['resultcount'] == 0:
             text = ' {:<22s} !  wrong name/not found in AUR'.format(pck)
             self.lo.log(LogType.NORMAL, console_txt=text, log_txt=text)
-
             return None
 
         if not isinstance(data['results'], list):
@@ -224,8 +243,8 @@ class Repo_Base(object):
 
         return data['results'][0]
 
-    def check_aur_web(self) -> Dict[str, str]:
-        pkgs_tobuild: Dict[str, str] = {}  # final dictionary (name:url) of packages to be updated
+    def check_aur_web(self) -> List[PackageToBuild]:
+        pkgs_tobuild: List[PackageToBuild] = []  # final dictionary (name:url) of packages to be updated
         self.lo.log(LogType.BOLD, console_txt="* Checking AUR for latest versions...")
         self.lo.log(console_txt=" ")
         time.sleep(1)
@@ -239,7 +258,7 @@ class Repo_Base(object):
 
             if not pck in self.latest_in_repo:
                 self.lo.log(console_txt=' {:<22s} + Building version {:}'.format(pck, aur_web_info['Version']))
-                pkgs_tobuild[pck] = str("http://aur.archlinux.org" + aur_web_info['URLPath'])
+                pkgs_tobuild.append(PackageToBuild(pck, str("http://aur.archlinux.org" + aur_web_info['URLPath'])))
             else:
                 curversion = self.latest_in_repo[pck].version
                 try:
@@ -260,7 +279,7 @@ class Repo_Base(object):
                 else:
                     self.lo.log(console_txt=' {:<22s} + updating {:s} -> {:s}'.format(pck, curversion,
                                                                                       aur_web_info['Version']))
-                    pkgs_tobuild[pck] = "http://aur.archlinux.org" + str(aur_web_info['URLPath'])
+                    pkgs_tobuild.append(PackageToBuild(pck, "http://aur.archlinux.org" + str(aur_web_info['URLPath'])))
             time.sleep(0.5)
         return pkgs_tobuild
 
@@ -274,47 +293,52 @@ class Repo_Base(object):
                             return os.path.join(root, ldir)
         raise ValueError("No PKGBUILD within {} folder".format(self.builddir))
 
-    def building(self, pkgs: Dict[str, str]) -> List[str]:
+    def building(self, pkgs: List[PackageToBuild]) -> List[FailedPackage]:
         """
         Actual building the application and copying package files into repo directory
         :param pkgs: Dictionary of package_name: aur_url_of_MAKEPKG
         :return: List of failing packages, can be empty
         """
 
-        failed_packages: List[str] = []
+        failed_packages: List[FailedPackage] = []
 
-        for position, (package, url) in enumerate(pkgs.items()):
-            text_body = package + " (" + str(position + 1) + "/" + str(
+        for position, pkg_to_build in enumerate(pkgs):
+            text_body = pkg_to_build.name + " (" + str(position + 1) + "/" + str(
                 len(pkgs)) + ") - " + time.strftime("%H:%M:%S", time.localtime())
             self.lo.log(console_txt="\n  * * BUILDING: " + text_body, log_txt="\n Building: " + text_body)
 
             # emptying builddir
             empty_dir(self.builddir)
 
-
-            # downloading package into builddir, appending _tmp to name to avoid overwriting of anything
-            localarchive = os.path.join(self.builddir, package + "_tmp")
-            urlretrieve(url, localarchive)
-
-            # unpacking
-            tararchive = tarfile.open(localarchive, "r:*")
-            tararchive.extractall(self.builddir)
-
-            # defining work directory
-            compiledir = self.get_compiledir(package)
-
             try:
+                # downloading package into builddir, appending _tmp to name to avoid overwriting of anything
+                localarchive = os.path.join(self.builddir, pkg_to_build.name + "_tmp")
+                print(pkg_to_build.url)
+                urlretrieve(pkg_to_build.url, localarchive)
+
+                # unpacking
+                tararchive = tarfile.open(localarchive, "r:*")
+                tararchive.extractall(self.builddir)
+
+                # defining work directory
+                compiledir = self.get_compiledir(pkg_to_build.name)
+
                 result = subprocess.call("makepkg", cwd=compiledir, shell=True)
                 text = " ( makepkg's return code: {} )".format(result)
                 self.lo.log(log_txt=text, console_txt=text)
                 if int(result) > 0:
-                    raise ValueError("makepkg failed with return code: {}".format(int(result)))
-
+                    fp = FailedPackage(pkg_to_build.name, f"makepkg RC: {result}")
+                    failed_packages.append(fp)
+                    self.lo.log(console_txt=f" ERROR: Build of {fp.name} failed with: {fp.reason}")
+                    continue
 
             except Exception as e:
-                self.lo.log(console_txt=" ERROR: Build of {} failed with: {}".format(package, str(e)))
-                failed_packages.append(package)
-                time.sleep(4)
+                if isinstance(e, HTTPError):
+                    self.lo.log(console_txt=f" Got HTTPError while retrieveing: {pkg_to_build.url}")
+                self.lo.log(console_txt=" ERROR: Build of {} failed with: {}".format(pkg_to_build.name, str(e)))
+                fp = FailedPackage(pkg_to_build.name, str(e))
+                failed_packages.append(fp)
+                time.sleep(2)
                 continue
 
             self.lo.log(console_txt=" ")
@@ -330,9 +354,9 @@ class Repo_Base(object):
                     time.sleep(4)
                 self.lo.log(console_txt=" ")
             if copied_count == 0:
-                text = "No package files found for {}".format(package)
+                text = "No package files found for {}".format(pkg_to_build.name)
                 self.lo.log(LogType.ERROR, console_txt=text, log_txt=text)
-                failed_packages.append(package)
+                failed_packages.append(FailedPackage(pkg_to_build.name, "No built archives found"))
 
         return failed_packages
 
@@ -439,8 +463,11 @@ def main():
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(failed_packages) > 0:
-        text = "Following packages failed to be build: {}".format(', '.join(failed_packages))
+        text = "Following packages failed to be build:"
         rp.lo.log(console_txt="* "+text, log_txt=text)
+        for fp in failed_packages:
+            text = f"  {fp.name} [{fp.reason}]"
+            rp.lo.log(console_txt="* "+text, log_txt=text)
 
     rp.lo.log(log_txt="")
     rp.lo.log(log_txt="All done at {}, quitting ".format(time.strftime("%d %b %Y %H:%M:%S", time.localtime())))
