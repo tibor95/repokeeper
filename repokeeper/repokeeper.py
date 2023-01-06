@@ -22,7 +22,7 @@ from packaging import version
 from repokeeper.config_parser import get_conf_content
 
 import getpass
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Set
 from enum import Enum
 
 class FailedPackage(object):
@@ -31,9 +31,11 @@ class FailedPackage(object):
         self.reason = str(reason)
 
 class PackageToBuild(object):
-    def __init__(self, name: str, url: str) -> None:
+    def __init__(self, name: str, url: str, dependencies: List[str], build_dependencies: List[str]) -> None:
         self.name = name
         self.url = url
+        self.dependencies = dependencies
+        self.bbuild_dependencies = build_dependencies
 
 class LogType(Enum):
     NORMAL = 0
@@ -45,18 +47,20 @@ class LogType(Enum):
 
 
 def get_version():
-    return "0.3.7"
+    return "0.3.8"
 
 
 def get_args():
     parser = argparse.ArgumentParser(
         description="Python tool for ArchLinux to maintain local repository of AUR packages. Updates packages listed in configuration file")
     parser.add_argument("-v", "--version", action="store_true", default=False)
+    parser.add_argument("-n", "--nodeps", action="store_true", default=False, help="Disable checking and building dependencies from AUR")
     parser.add_argument("--dryrun", action="store_true", default=False, help="Do not build nor recreate repo index")
+
 
     args = parser.parse_args()
 
-    return args.version, args.dryrun
+    return args.version, args.dryrun, args.nodeps
 
 
 def signal_handler(signal, frame):
@@ -146,7 +150,7 @@ def get_pkg_identification(filename: str) -> pkg_identification:
 
 class Repo_Base(object):
 
-    def __init__(self):
+    def __init__(self, skip_dependencies: bool = False):
         # DEFINING VARIABLES
         # defaults:
         self.conffileloc = "/etc/repokeeper.conf"
@@ -154,6 +158,7 @@ class Repo_Base(object):
         self.lo = Logger()
         self.lo.log(console_txt="* Parsing configuration file...")
         self.latest_in_repo: Dict[str, pkg_identification] = {}
+        self.skip_dependencies = skip_dependencies
         try:
             self.pkgs_conf, self.repodir, self.builddir, self.reponame = get_conf_content(self.conffileloc, "local-rk")
         except Exception as e:
@@ -217,7 +222,7 @@ class Repo_Base(object):
                         len(required_but_with_newer_version),
                         len(in_repo_not_required)))
 
-    def fetch_pck_info_from_aur_web(self, pck: str) -> Optional[Dict]:
+    def fetch_pck_info_from_aur_web(self, pck: str, silent_failure: bool = False) -> Optional[Dict]:
         url = f"https://aur.archlinux.org/rpc/?v=5&type=info&arg={pck}"
         response = urlopen(url)
         html = response.read()
@@ -229,8 +234,9 @@ class Repo_Base(object):
             return None
 
         if data['type'] == 'error' or data['resultcount'] == 0:
+            #if not silent_failure:
             text = ' {:<22s} !  wrong name/not found in AUR'.format(pck)
-            self.lo.log(LogType.NORMAL, console_txt=text, log_txt=text)
+            self.lo.log(LogType.NORMAL, console_txt=None if silent_failure else text, log_txt=text)
             return None
 
         if not isinstance(data['results'], list):
@@ -243,44 +249,73 @@ class Repo_Base(object):
 
         return data['results'][0]
 
+    def check_single_package(self, pck_name: str, silent_failure: bool = False) -> Optional[PackageToBuild]:
+        aur_web_info = self.fetch_pck_info_from_aur_web(pck_name, silent_failure)
+        if aur_web_info is None:
+            return
+        
+        pck_to_build = PackageToBuild(pck_name, str("http://aur.archlinux.org" + aur_web_info['URLPath']),
+        aur_web_info.get("Depends",[]), aur_web_info.get("MakeDepends",[]))
+
+        aurversion = str(aur_web_info['Version'].replace("-", "."))
+
+        if not pck_name in self.latest_in_repo:
+            log_txt = ' {:<22s} + Building version {:}'.format(pck_name, aur_web_info['Version'])
+            self.lo.log(console_txt=log_txt, log_txt=log_txt)
+            return pck_to_build
+
+        else:
+            curversion = self.latest_in_repo[pck_name].version
+            try:
+                curversion_obj = parse_version(curversion)
+                aurversion_obj = parse_version(aurversion)
+            except Exception as e:
+                text = ' ERROR with {}: {}'.format(pck_name, str(e))
+                return
+            if aurversion_obj == curversion_obj:
+                text = ' {:<22s} - {:s} In latest version, no need to update'.format(pck_name, aur_web_info['Version'])
+                self.lo.log(LogType.NORMAL, console_txt=text, log_txt=text)
+
+            elif aurversion_obj < curversion_obj:
+                self.lo.log(console_txt=' {:<22s} - {:s} Local package newer({:s}), doing nothing'.format(pck_name,
+                                                                                                            aur_web_info[
+                                                                                                                'Version'],
+                                                                                                            aurversion))
+            else:
+                log_txt = ' {:<22s} + updating {:s} -> {:s}'.format(pck_name, curversion,
+                                                                                    aur_web_info['Version'])
+                self.lo.log(console_txt=log_txt, log_txt=log_txt)
+                return pck_to_build
+            
+
     def check_aur_web(self) -> List[PackageToBuild]:
         pkgs_tobuild: List[PackageToBuild] = []  # final dictionary (name:url) of packages to be updated
         self.lo.log(LogType.BOLD, console_txt="* Checking AUR for latest versions...")
         self.lo.log(console_txt=" ")
+        dependencies: Set[str] = set()
+        #make_dependencies: Set[str] = set()
         time.sleep(1)
 
         for pck in self.pkgs_conf:
-            aur_web_info = self.fetch_pck_info_from_aur_web(pck)
-            if aur_web_info is None:
-                continue
-
-            aurversion = str(aur_web_info['Version'].replace("-", "."))
-
-            if not pck in self.latest_in_repo:
-                self.lo.log(console_txt=' {:<22s} + Building version {:}'.format(pck, aur_web_info['Version']))
-                pkgs_tobuild.append(PackageToBuild(pck, str("http://aur.archlinux.org" + aur_web_info['URLPath'])))
-            else:
-                curversion = self.latest_in_repo[pck].version
-                try:
-                    curversion_obj = parse_version(curversion)
-                    aurversion_obj = parse_version(aurversion)
-                except Exception as e:
-                    text = ' ERROR with {}: {}'.format(pck, str(e))
-                    continue
-                if aurversion_obj == curversion_obj:
-                    text = ' {:<22s} - {:s} In latest version, no need to update'.format(pck, aur_web_info['Version'])
-                    self.lo.log(LogType.NORMAL, console_txt=text, log_txt=text)
-
-                elif aurversion_obj < curversion_obj:
-                    self.lo.log(console_txt=' {:<22s} - {:s} Local package newer({:s}), doing nothing'.format(pck,
-                                                                                                              aur_web_info[
-                                                                                                                  'Version'],
-                                                                                                              aurversion))
-                else:
-                    self.lo.log(console_txt=' {:<22s} + updating {:s} -> {:s}'.format(pck, curversion,
-                                                                                      aur_web_info['Version']))
-                    pkgs_tobuild.append(PackageToBuild(pck, "http://aur.archlinux.org" + str(aur_web_info['URLPath'])))
+            to_build: Optional[PackageToBuild] = self.check_single_package(pck)
+            if to_build:
+                pkgs_tobuild.append(to_build)
+                dependencies.update(set(to_build.dependencies))
+                dependencies.update(set(to_build.bbuild_dependencies))
             time.sleep(0.5)
+        
+        if not self.skip_dependencies and dependencies:
+            log_txt = f"Querying AUR for normal and build dependencies: {', '.join(dependencies)}"
+            self.lo.log(console_txt="\n "+log_txt, log_txt="\n" + log_txt)
+
+            while dependencies:
+                dependency: str = dependencies.pop()
+                if dependency in self.pkgs_conf:
+                    continue
+                to_build = self.check_single_package(dependency, True)  # Quietly ignoring if not in AUR
+                if to_build:
+                    pkgs_tobuild.append(to_build)
+
         return pkgs_tobuild
 
     def get_compiledir(self, package: str) -> str:
@@ -403,11 +438,11 @@ class Repo_Base(object):
 
 
 def main():
-    print_version, dry_run = get_args()
+    print_version, dry_run, no_dependencies = get_args()
     if print_version:
         Logger().log(console_txt = get_version(), err_code = 0)
 
-    rp = Repo_Base()
+    rp = Repo_Base(skip_dependencies=no_dependencies)
 
     if getpass.getuser() == "root":
         rp.lo.log(LogType.ERROR, console_txt="root is not allowed to run this tool", err_code=10)

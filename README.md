@@ -27,7 +27,9 @@ HOW IT WORKS:
 3. It sends query to AUR website to find out what are latest version of those
 packages
 4. If AUR contains newer version, it builds the packages and put the into repo dir
-5. Regenerates repo db file. Note, it puts there all pkgs located in repo dir,
+5. Unless disabled by CLI switch it checks and builds direct dependencies including
+make dependencies if they are found in AUR (since 0.3.8)
+6. Regenerates repo db file. Note, it puts there all pkgs located in repo dir,
 even those that are not in your config file. Repokeeper doesnt delete any
 packages from repo directory, you have to do it by hand. Afterwards you
 can re-run repokeeper to rebuild repo db file, to get rid of entries for deleted
@@ -43,10 +45,14 @@ name in /etr/pacman.conf must be the same, of course.
 The default is local-rk, in this case no entry in /etc/repokeeper.conf
 is needed.
 
+LOG file:
+
+/tmp/repokeeper.log
+
 
 Feedback welcomed
 
 
-October 21, 2020
+January 06, 2022
 
 
