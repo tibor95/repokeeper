@@ -57,7 +57,13 @@ class RepoContent(object):
             self._content.append([pck_ident, pck_ident.file_basename in in_config])
         for item in self._content:
             item.append(item[0].version == self.get_highest_version(item[0].file_basename))
+        self._content.sort(key=lambda x: f"{x[0].file_basename}___{x[0].version}")
     
+    def list(self) -> List[str]:
+        res = []
+        for item in self._content:
+            res.append(f"{item[0].file_basename:<22}  {item[0].version:<12}  {'newest ver. in repo' if item[2] else ''}")
+        return res
     
     def get_highest_version(self, pck_name):
         res = None
@@ -209,49 +215,7 @@ class Repo_Base(object):
 
     def parse_repo(self):
         self.repo_content = RepoContent(self.repodir + "/" + self.package_regexp  ,self.pkgs_conf)
-
         time.sleep(1)
-
-    # def list_files_in_repo(self) -> List[str]:
-    #     files = []
-    #     files.extend(glob.glob(self.repodir + "/" + self.package_regexp))
-    #     return list(set(files))  # removing duplicates
-
-    # def parse_localrepo(self, print_summary = True) -> Tuple[
-    #     List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
-
-    #     files = self.list_files_in_repo()
-
-    #     in_repo_not_required: List[pkg_identification] = []  # list of files for packages not defined in repo.conf
-    #     for file in files:
-    #         pck_id = get_pkg_identification(file)
-    #         if not pck_id.file_basename.lower() in [item.lower() for item in self.pkgs_conf]:
-    #             in_repo_not_required.append(pck_id)
-
-    #     required_but_with_newer_version: List[pkg_identification] = []  # list of possible old packages
-    #     newest_required_in_repo: Dict[str, "pkg_identification"] = {}
-    #     # now testing names in conf against files in repa
-    #     for app_name in self.pkgs_conf:
-    #         latest = None  # single latest package for aur_name (application)
-    #         for file in files:
-    #             pck_id = get_pkg_identification(file)
-    #             if not app_name.lower() == pck_id.file_basename.lower():
-    #                 continue
-    #             if latest is None:
-    #                 latest = pck_id
-    #                 continue
-    #             if parse_version(latest.version) > parse_version(pck_id.version):
-    #                 required_but_with_newer_version.append(pck_id)
-    #             else:
-    #                 required_but_with_newer_version.append(latest)
-    #                 latest = pck_id
-    #         # now we have identified file for given aur name
-    #         if latest is not None:
-    #             newest_required_in_repo[app_name] = latest
-    #     if print_summary:
-    #         self.print_repo_summary(required_but_with_newer_version, in_repo_not_required, newest_required_in_repo)
-
-    #     return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
 
     def print_repo_summary(self):
         # printing what is in repository with latest versions
@@ -399,7 +363,7 @@ class Repo_Base(object):
             try:
                 # downloading package into builddir, appending _tmp to name to avoid overwriting of anything
                 localarchive = os.path.join(self.builddir, pkg_to_build.name + "_tmp")
-                print(pkg_to_build.url)
+                #print(pkg_to_build.url)
                 urlretrieve(pkg_to_build.url, localarchive)
 
                 # unpacking
@@ -419,10 +383,13 @@ class Repo_Base(object):
                     continue
 
             except Exception as e:
+                e_txt = str(e)
                 if isinstance(e, HTTPError):
-                    self.lo.log(console_txt=f" Got HTTPError while retrieveing: {pkg_to_build.url}")
+                    down_error_text = f" Got HTTPError while retrieveing: {pkg_to_build.url}"
+                    self.lo.log(console_txt=down_error_text, log_txt=down_error_text)
+                    e_txt += f" [{pkg_to_build.url}]"
                 self.lo.log(console_txt=" ERROR: Build of {} failed with: {}".format(pkg_to_build.name, str(e)))
-                fp = FailedPackage(pkg_to_build.name, str(e))
+                fp = FailedPackage(pkg_to_build.name, e_txt)
                 failed_packages.append(fp)
                 time.sleep(2)
                 continue
@@ -536,6 +503,15 @@ def main():
 
     # parsing local repo once more to identify outdated packages
     rp.parse_repo() # refresh the information
+
+    #printing content of repo into log file
+    rp.lo.log(console_txt = f"\nCheck log file {rp.lo.logfile} for list of all packages and versions in repo\n",
+    log_txt="\nRepository packages and versions:")
+    for item in rp.repo_content.list():
+        rp.lo.log(console_txt = None, log_txt=f"  {item}")
+    rp.lo.log(console_txt = None, log_txt=" ")
+
+
     if len(rp.repo_content.old_versions) > 0:
         rp.lo.log(log_txt="\nFollowing files/packages have newer version in the repo and might be deleted from the repo folder:")
         for item in rp.repo_content.old_versions:

@@ -45,8 +45,8 @@ class Test_RepoObject(unittest.TestCase):
         'viber-13.3.1.22-0-x86_64.pkg.tar.zst',
         'viber-13.3.1.21-0-x86_64.pkg.tar.zst']
         ro = RepoContent('aaaaa', ['gqview', 'fakepck'])
-        for item in ro._content:
-            print(item)
+        for item in ro.list():
+            self.assertIsInstance(item, str)
         self.assertEqual(len(ro.new_versions), 2)
         self.assertEqual(len(ro.old_versions), 4)
         self.assertEqual(len(ro.new_but_not_in_config), 1)
