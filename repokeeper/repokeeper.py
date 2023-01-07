@@ -35,7 +35,54 @@ class PackageToBuild(object):
         self.name = name
         self.url = url
         self.dependencies = dependencies
-        self.bbuild_dependencies = build_dependencies
+        self.build_dependencies = build_dependencies
+
+class pkg_identification(object):
+    def __init__(self, file: str, file_basename: str, ver: str):
+        self.file = file
+        self.file_basename = file_basename
+        self.version = ver
+        if not self.file_basename in self.file:
+            Logger().log(LogType.ERROR, console_txt="pkg_identification failed", err_code=7)
+        
+    def __repr__(self) -> str:
+        return f"<{self.file}|{self.file_basename}|{self.version}>"
+
+class RepoContent(object):
+    
+    def __init__(self, path_regexp, in_config: List[str]) -> None:
+        self._content: List[pkg_identification, bool, bool] = [] #Tuple(pkg_identification, in config(bool), newest)
+        for pck_file in glob.glob(path_regexp):
+            pck_ident = get_pkg_identification(pck_file)
+            self._content.append([pck_ident, pck_ident.file_basename in in_config])
+        for item in self._content:
+            item.append(item[0].version == self.get_highest_version(item[0].file_basename))
+    
+    
+    def get_highest_version(self, pck_name):
+        res = None
+        for item in self._content:
+            if item[0].file_basename != pck_name:
+                continue
+            if res is None or res < item[0].version:
+                res = item[0].version
+        return res
+
+    @property
+    def new_versions(self) -> List[pkg_identification]:
+        return [item[0] for item in self._content if item[2] is True]
+    
+    @property
+    def old_versions(self) -> List[pkg_identification]:
+        return [item[0] for item in self._content if not item[2]]
+
+    @property
+    def new_but_not_in_config(self) -> List[pkg_identification]:
+        return [item[0] for item in self._content if not item[1] and item[2]]
+    
+    @property
+    def list_pck_names(self) -> Set[str]:
+        return set([item[0].file_basename for item in self._content])
 
 class LogType(Enum):
     NORMAL = 0
@@ -110,13 +157,7 @@ class Logger(object):
             sys.exit(err_code)
 
 
-class pkg_identification(object):
-    def __init__(self, file: str, file_basename: str, ver: str):
-        self.file = file
-        self.file_basename = file_basename
-        self.version = ver
-        if not self.file_basename in self.file:
-            Logger().log(LogType.ERROR, console_txt="pkg_identification failed", err_code=7)
+
 
 
 def empty_dir(directory: str) -> None:  # recursivelly deletes content of given dir
@@ -157,70 +198,72 @@ class Repo_Base(object):
         self.package_regexp = "*pkg.tar.zst"
         self.lo = Logger()
         self.lo.log(console_txt="* Parsing configuration file...")
-        self.latest_in_repo: Dict[str, pkg_identification] = {}
+        #self.latest_in_repo: Dict[str, pkg_identification] = {}
         self.skip_dependencies = skip_dependencies
         try:
             self.pkgs_conf, self.repodir, self.builddir, self.reponame = get_conf_content(self.conffileloc, "local-rk")
         except Exception as e:
             self.lo.log(LogType.ERROR, console_txt=str(e), log_txt=str(e), err_code=10)
+        self.repo_content = None
+        self.parse_repo()
+
+    def parse_repo(self):
+        self.repo_content = RepoContent(self.repodir + "/" + self.package_regexp  ,self.pkgs_conf)
+
         time.sleep(1)
 
-    def list_files_in_repo(self) -> List[str]:
-        files = []
-        files.extend(glob.glob(self.repodir + "/" + self.package_regexp))
-        return list(set(files))  # removing duplicates
+    # def list_files_in_repo(self) -> List[str]:
+    #     files = []
+    #     files.extend(glob.glob(self.repodir + "/" + self.package_regexp))
+    #     return list(set(files))  # removing duplicates
 
-    def parse_localrepo(self, print_summary = True) -> Tuple[
-        List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
+    # def parse_localrepo(self, print_summary = True) -> Tuple[
+    #     List[pkg_identification], List[pkg_identification], Dict[str, "pkg_identification"]]:  # elaborate this
 
-        files = self.list_files_in_repo()
+    #     files = self.list_files_in_repo()
 
-        in_repo_not_required: List[pkg_identification] = []  # list of files for packages not defined in repo.conf
-        for file in files:
-            pck_id = get_pkg_identification(file)
-            if not pck_id.file_basename.lower() in [item.lower() for item in self.pkgs_conf]:
-                in_repo_not_required.append(pck_id)
+    #     in_repo_not_required: List[pkg_identification] = []  # list of files for packages not defined in repo.conf
+    #     for file in files:
+    #         pck_id = get_pkg_identification(file)
+    #         if not pck_id.file_basename.lower() in [item.lower() for item in self.pkgs_conf]:
+    #             in_repo_not_required.append(pck_id)
 
-        required_but_with_newer_version: List[pkg_identification] = []  # list of possible old packages
-        newest_required_in_repo: Dict[str, "pkg_identification"] = {}
-        # now testing names in conf against files in repa
-        for app_name in self.pkgs_conf:
-            latest = None  # single latest package for aur_name (application)
-            for file in files:
-                pck_id = get_pkg_identification(file)
-                if not app_name.lower() == pck_id.file_basename.lower():
-                    continue
-                if latest is None:
-                    latest = pck_id
-                    continue
-                if parse_version(latest.version) > parse_version(pck_id.version):
-                    required_but_with_newer_version.append(pck_id)
-                else:
-                    required_but_with_newer_version.append(latest)
-                    latest = pck_id
-            # now we have identified file for given aur name
-            if latest is not None:
-                newest_required_in_repo[app_name] = latest
-        if print_summary:
-            self.print_repo_summary(required_but_with_newer_version, in_repo_not_required, newest_required_in_repo)
+    #     required_but_with_newer_version: List[pkg_identification] = []  # list of possible old packages
+    #     newest_required_in_repo: Dict[str, "pkg_identification"] = {}
+    #     # now testing names in conf against files in repa
+    #     for app_name in self.pkgs_conf:
+    #         latest = None  # single latest package for aur_name (application)
+    #         for file in files:
+    #             pck_id = get_pkg_identification(file)
+    #             if not app_name.lower() == pck_id.file_basename.lower():
+    #                 continue
+    #             if latest is None:
+    #                 latest = pck_id
+    #                 continue
+    #             if parse_version(latest.version) > parse_version(pck_id.version):
+    #                 required_but_with_newer_version.append(pck_id)
+    #             else:
+    #                 required_but_with_newer_version.append(latest)
+    #                 latest = pck_id
+    #         # now we have identified file for given aur name
+    #         if latest is not None:
+    #             newest_required_in_repo[app_name] = latest
+    #     if print_summary:
+    #         self.print_repo_summary(required_but_with_newer_version, in_repo_not_required, newest_required_in_repo)
 
-        return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
+    #     return required_but_with_newer_version, in_repo_not_required, newest_required_in_repo
 
-    def print_repo_summary(self, required_but_with_newer_version: List[pkg_identification],
-                           in_repo_not_required: List[pkg_identification],
-                           newest_required_in_repo: Dict[str, "pkg_identification"]):
+    def print_repo_summary(self):
         # printing what is in repository with latest versions
-        strcurrepo = ""
-        for k, v in newest_required_in_repo.items():
-            strcurrepo = strcurrepo + " " + newest_required_in_repo[k].file_basename + "-" + newest_required_in_repo[
-                k].version
         self.lo.log(LogType.BOLD, console_txt="* Newest versions of packages in your local repository:")
-        self.lo.log(console_txt=strcurrepo)
-        if len(required_but_with_newer_version) > 0 or len(in_repo_not_required) > 0:
+        for item in self.repo_content.new_versions:
+            log_txt = f"  {item.file_basename} - {item.version}"
+            self.lo.log(console_txt=log_txt)
+
+        if len(self.repo_content.old_versions) > 0:
             self.lo.log(LogType.BOLD,
-                        console_txt="* View the log file {} for a list of outdated packages [{}] or packages not listed in your conf file [{}].".format(self.lo.logfile,
-                        len(required_but_with_newer_version),
-                        len(in_repo_not_required)))
+                        console_txt="* View the log file {} for a list of outdated packages [{}]".format(self.lo.logfile,
+                        len(self.repo_content.old_versions)))
 
     def fetch_pck_info_from_aur_web(self, pck: str, silent_failure: bool = False) -> Optional[Dict]:
         url = f"https://aur.archlinux.org/rpc/?v=5&type=info&arg={pck}"
@@ -259,13 +302,13 @@ class Repo_Base(object):
 
         aurversion = str(aur_web_info['Version'].replace("-", "."))
 
-        if not pck_name in self.latest_in_repo:
+        if not pck_name in self.repo_content.list_pck_names:
             log_txt = ' {:<22s} + Building version {:}'.format(pck_name, aur_web_info['Version'])
             self.lo.log(console_txt=log_txt, log_txt=log_txt)
             return pck_to_build
 
         else:
-            curversion = self.latest_in_repo[pck_name].version
+            curversion = self.repo_content.get_highest_version(pck_name)
             try:
                 curversion_obj = parse_version(curversion)
                 aurversion_obj = parse_version(aurversion)
@@ -289,11 +332,14 @@ class Repo_Base(object):
             
 
     def check_aur_web(self) -> List[PackageToBuild]:
+        """
+        Returns list of PackageToBuild, ones that are explicitelly listed in config and dependencies
+        if not disables by CLI switch
+        """
         pkgs_tobuild: List[PackageToBuild] = []  # final dictionary (name:url) of packages to be updated
         self.lo.log(LogType.BOLD, console_txt="* Checking AUR for latest versions...")
         self.lo.log(console_txt=" ")
-        dependencies: Set[str] = set()
-        #make_dependencies: Set[str] = set()
+        dependencies: Set[str] = set()  # both normal and build ones
         time.sleep(1)
 
         for pck in self.pkgs_conf:
@@ -301,20 +347,25 @@ class Repo_Base(object):
             if to_build:
                 pkgs_tobuild.append(to_build)
                 dependencies.update(set(to_build.dependencies))
-                dependencies.update(set(to_build.bbuild_dependencies))
+                dependencies.update(set(to_build.build_dependencies))
             time.sleep(0.5)
         
         if not self.skip_dependencies and dependencies:
             log_txt = f"Querying AUR for normal and build dependencies: {', '.join(dependencies)}"
             self.lo.log(console_txt="\n "+log_txt, log_txt="\n" + log_txt)
+            checked_pcks: Set[str] = set()
 
             while dependencies:
                 dependency: str = dependencies.pop()
-                if dependency in self.pkgs_conf:
+                if dependency in self.pkgs_conf or dependency in checked_pcks:
                     continue
+                checked_pcks.add(dependency)
                 to_build = self.check_single_package(dependency, True)  # Quietly ignoring if not in AUR
                 if to_build:
                     pkgs_tobuild.append(to_build)
+                    for dependency in to_build.dependencies + to_build.build_dependencies:
+                        if dependency not in checked_pcks:
+                            dependencies.add(dependency)
 
         return pkgs_tobuild
 
@@ -453,9 +504,9 @@ def main():
     # testing existence of repordir and builddir
     rp.folder_check()
 
-    # finding what is in localrepo directory
-    rp.older_packages, rp.not_in_repo, rp.latest_in_repo = rp.parse_localrepo(print_summary=False)  # also prints out packages in localrepo
-    time.sleep(1)
+    # # finding what is in localrepo directory
+    # rp.older_packages, rp.not_in_repo, rp.latest_in_repo = rp.parse_localrepo(print_summary=False)  # also prints out packages in localrepo
+    # time.sleep(1)
 
     # checking what is in AUR and what version
     if len(rp.pkgs_conf) > 0:
@@ -483,18 +534,18 @@ def main():
     time.sleep(1)
     rp.update_repo_file()
 
-    # parsing local repo to identify outdated packages
-    older_packages, packages_not_required, rp.latest_in_repo = rp.parse_localrepo()
-    if len(older_packages) > 0:
+    # parsing local repo once more to identify outdated packages
+    rp.parse_repo() # refresh the information
+    if len(rp.repo_content.old_versions) > 0:
         rp.lo.log(log_txt="\nFollowing files/packages have newer version in the repo and might be deleted from the repo folder:")
-        for item in older_packages:
+        for item in rp.repo_content.old_versions:
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
-    if len(packages_not_required) > 0:
+    if len(rp.repo_content.new_but_not_in_config) > 0:
 
-        rp.lo.log(log_txt="\nFollowing packages are not listed in your repokeeper.conf and might \
-    be deleted from your repo (just copy&paste it en block into a console):")
-        for item in packages_not_required:
+        rp.lo.log(log_txt="\nFollowing packages are not listed in your repokeeper.conf, but might be \
+dependencies, so delete them on your own responsibility (just copy&paste it en block into a console):")
+        for item in rp.repo_content.new_but_not_in_config:
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(failed_packages) > 0:
