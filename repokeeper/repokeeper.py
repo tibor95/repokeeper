@@ -105,15 +105,16 @@ def get_version():
 
 def get_args():
     parser = argparse.ArgumentParser(
-        description="Python tool for ArchLinux to maintain local repository of AUR packages. Updates packages listed in configuration file")
+        description="Python tool for ArchLinux to maintain local repository of AUR packages. It updates packages listed in configuration file.")
     parser.add_argument("-v", "--version", action="store_true", default=False)
     parser.add_argument("-n", "--nodeps", action="store_true", default=False, help="Disable checking and building dependencies from AUR")
     parser.add_argument("--dryrun", action="store_true", default=False, help="Do not build nor recreate repo index")
+    parser.add_argument("-l", "--list", action="store_true", default=False, help="Print content of repo and exit")
 
 
     args = parser.parse_args()
 
-    return args.version, args.dryrun, args.nodeps
+    return args.version, args.dryrun, args.nodeps, args.list
 
 
 def signal_handler(signal, frame):
@@ -151,6 +152,8 @@ class Logger(object):
             open_col = Logger._WARNING + Logger._BOLD
         elif logtype == LogType.HIGHLIGHT:
             open_col = Logger._HIGHLIGHT
+        elif logtype == LogType.BOLD:
+            open_col = Logger._BOLD
         else:
             open_col = ""
 
@@ -301,7 +304,7 @@ class Repo_Base(object):
         if not disables by CLI switch
         """
         pkgs_tobuild: List[PackageToBuild] = []  # final dictionary (name:url) of packages to be updated
-        self.lo.log(LogType.BOLD, console_txt="* Checking AUR for latest versions...")
+        self.lo.log(LogType.BOLD, console_txt="\n* Checking AUR for latest versions...")
         self.lo.log(console_txt=" ")
         dependencies: Set[str] = set()  # both normal and build ones
         time.sleep(1)
@@ -429,7 +432,7 @@ class Repo_Base(object):
 
     def update_repo_file(self) -> None:
         repo_file = os.path.join(self.repodir, self.reponame + ".db.tar.gz")
-        self.lo.log(LogType.BOLD, console_txt="* Updating local repo db file: {}".format(repo_file))
+        self.lo.log(LogType.BOLD, console_txt="\n\n* Updating local repo db file: {}".format(repo_file))
         if os.path.isfile(repo_file):
             os.remove(repo_file)
         else:
@@ -447,37 +450,36 @@ class Repo_Base(object):
             self.lo.log(LogType.CUSTOM,
                         Logger._HIGHLIGHT + "    [" + self.reponame + "]" + Logger._UNCOLOR + "                          # repository will be named '" + self.reponame + "'")
             self.lo.log(LogType.HIGHLIGHT, console_txt="    Server = file://" + self.repodir)
-            self.lo.log(console_txt=
-                        "* Note that all packages/files present in repository folder [{}] was put into repo db file, not only those in your config file.".format(
-                            self.repodir))
+
         except Exception as e:
             text = "   repodb file creation failed with {}".format(str(e))
             self.lo.log(LogType.ERROR, console_txt=text, log_txt=text, err_code=11)
 
 
 def main():
-    print_version, dry_run, no_dependencies = get_args()
+    print_version, dry_run, no_dependencies, list_only = get_args()
     if print_version:
         Logger().log(console_txt = get_version(), err_code = 0)
 
     rp = Repo_Base(skip_dependencies=no_dependencies)
 
+    if list_only:
+        rp.lo.log(logtype=LogType.HIGHLIGHT, console_txt = "\nContent of repository:")
+        for item in rp.repo_content.list():
+            rp.lo.log(console_txt =f"  {item}")
+        return
+
     if getpass.getuser() == "root":
         rp.lo.log(LogType.ERROR, console_txt="root is not allowed to run this tool", err_code=10)
 
     rp.lo.log(console_txt=" [REPOKEEPER v. {}]".format(get_version()))
-    rp.lo.log(log_txt="starting at " + time.strftime("%d %b %Y %H:%M:%S", time.localtime()))
+    rp.lo.log(log_txt=f"\n\n{'# ' * 10}  starting at {time.strftime('%d %b %Y %H:%M:%S', time.localtime())}   {'# ' * 10}")
 
     # testing existence of repordir and builddir
     rp.folder_check()
 
-    # # finding what is in localrepo directory
-    # rp.older_packages, rp.not_in_repo, rp.latest_in_repo = rp.parse_localrepo(print_summary=False)  # also prints out packages in localrepo
-    # time.sleep(1)
-
     # checking what is in AUR and what version
     if len(rp.pkgs_conf) > 0:
-        # print(latest_in_repo)
         pkgs_to_built = rp.check_aur_web()  # also print out output from aur check
     else:
         pkgs_to_built = {}
@@ -525,11 +527,11 @@ dependencies, so delete them on your own responsibility (just copy&paste it en b
             rp.lo.log(log_txt="rm {} ;".format(item.file))
 
     if len(failed_packages) > 0:
-        text = "Following packages failed to be build:"
-        rp.lo.log(console_txt="* "+text, log_txt=text)
+        text = f"Following {len(failed_packages)} packages had not been built:"
+        rp.lo.log(logtype=LogType.WARNING, console_txt="* "+text, log_txt=text)
         for fp in failed_packages:
-            text = f"  {fp.name} [{fp.reason}]"
-            rp.lo.log(console_txt="* "+text, log_txt=text)
+            text = f"  {fp.name:<22} {fp.reason}"
+            rp.lo.log(console_txt=" "+text, log_txt=text)
 
     rp.lo.log(log_txt="")
     rp.lo.log(log_txt="All done at {}, quitting ".format(time.strftime("%d %b %Y %H:%M:%S", time.localtime())))
